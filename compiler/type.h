@@ -456,16 +456,25 @@ private:
     std::shared_ptr<Type> pointee_type_;
 };
 
+// Forward declaration to avoid circular dependency
+class Expr;
+
 /**
  * ArrayType - Represents an array type
  */
 class ArrayType : public Type {
 public:
     /**
-     * Constructor
+     * Constructor with concrete size
      */
     ArrayType(std::shared_ptr<Type> element_type, size_t size)
-        : Type(Kind::ARRAY), element_type_(element_type), size_(size) {}
+        : Type(Kind::ARRAY), element_type_(element_type), size_(size), size_expr_(nullptr), has_constant_size_(true) {}
+    
+    /**
+     * Constructor with expression for size (for parsing)
+     */
+    ArrayType(std::shared_ptr<Type> element_type, std::shared_ptr<Expr> size_expr)
+        : Type(Kind::ARRAY), element_type_(element_type), size_(0), size_expr_(size_expr), has_constant_size_(false) {}
     
     /**
      * GetElementType - Get the element type
@@ -475,12 +484,34 @@ public:
     /**
      * GetSize - Get the size of the type in bytes
      */
-    size_t GetSize() const override { return element_type_->GetSize() * size_; }
+    size_t GetSize() const override { 
+        if (has_constant_size_)
+            return element_type_->GetSize() * size_; 
+        return 0; // Size not known until size_expr_ is evaluated
+    }
     
     /**
      * GetNumElements - Get the number of elements in the array
      */
     size_t GetNumElements() const { return size_; }
+    
+    /**
+     * GetSizeExpr - Get the size expression
+     */
+    std::shared_ptr<Expr> GetSizeExpr() const { return size_expr_; }
+    
+    /**
+     * HasConstantSize - Check if the array has a constant size
+     */
+    bool HasConstantSize() const { return has_constant_size_; }
+    
+    /**
+     * SetSize - Set the size after evaluating the expression
+     */
+    void SetSize(size_t size) {
+        size_ = size;
+        has_constant_size_ = true;
+    }
     
     /**
      * GetAlignment - Get the alignment of the type in bytes
@@ -500,6 +531,8 @@ public:
 private:
     std::shared_ptr<Type> element_type_;
     size_t size_;
+    std::shared_ptr<Expr> size_expr_;
+    bool has_constant_size_;
 };
 
 /**

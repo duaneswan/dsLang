@@ -23,6 +23,13 @@ void SemanticAnalyzer::Analyze(CompilationUnit* unit) {
 }
 
 // ASTVisitor implementation - all methods are no-ops for simplicity
+void SemanticAnalyzer::VisitCompilationUnit(CompilationUnit* unit) {
+    // Visit all declarations in the compilation unit
+    for (const auto& decl : unit->GetDecls()) {
+        decl->Accept(this);
+    }
+}
+
 void SemanticAnalyzer::VisitBinaryExpr(BinaryExpr* expr) {}
 void SemanticAnalyzer::VisitUnaryExpr(UnaryExpr* expr) {}
 void SemanticAnalyzer::VisitLiteralExpr(LiteralExpr* expr) {}

@@ -12,6 +12,42 @@
 
 namespace dsLang {
 
+// Factory function to create array types
+std::shared_ptr<ArrayType> CreateArrayType(std::shared_ptr<Type> element_type, std::shared_ptr<Expr> size_expr) {
+    return std::make_shared<ArrayType>(element_type, size_expr);
+}
+
+std::shared_ptr<ArrayType> CreateArrayType(std::shared_ptr<Type> element_type, size_t size) {
+    return std::make_shared<ArrayType>(element_type, size);
+}
+
+/**
+ * CreateType - Create a type from the specified token
+ */
+std::shared_ptr<Type> Parser::CreateType(const Token& type_token, bool is_unsigned) {
+    switch (type_token.GetKind()) {
+        case TokenKind::KW_VOID:
+            return std::make_shared<VoidType>();
+        case TokenKind::KW_BOOL:
+            return std::make_shared<BoolType>();
+        case TokenKind::KW_CHAR:
+            return std::make_shared<CharType>(is_unsigned);
+        case TokenKind::KW_SHORT:
+            return std::make_shared<ShortType>(is_unsigned);
+        case TokenKind::KW_INT:
+            return std::make_shared<IntType>(is_unsigned);
+        case TokenKind::KW_LONG:
+            return std::make_shared<LongType>(is_unsigned);
+        case TokenKind::KW_FLOAT:
+            return std::make_shared<FloatType>();
+        case TokenKind::KW_DOUBLE:
+            return std::make_shared<DoubleType>();
+        default:
+            ReportError("Unknown type token");
+            return nullptr;
+    }
+}
+
 /**
  * Constructor - Initialize parser with a lexer
  */
@@ -165,16 +201,9 @@ std::shared_ptr<CompilationUnit> Parser::ParseCompilationUnit() {
     
     // Parse declarations until we reach the end of the file
     while (!IsAtEnd()) {
-        try {
-            auto decl = ParseDeclaration();
-            if (decl) {
-                declarations.push_back(decl);
-            }
-        } catch (const std::exception& e) {
-            // If an exception is thrown during parsing, report an error and continue
-            std::string error_msg = "Exception during parsing: ";
-            error_msg += e.what();
-            ReportError(error_msg);
+        auto decl = ParseDeclaration();
+        if (decl) {
+            declarations.push_back(decl);
         }
     }
     
@@ -377,8 +406,29 @@ std::shared_ptr<VarDecl> Parser::ParseVariableDeclaration() {
         
         Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after array size");
         
-        // Create array type
-        type = std::make_shared<ArrayType>(type, size_expr);
+        // Create a size_t literal for constant sizes if possible
+        size_t array_size = 0;
+        bool has_constant_size = false;
+        
+        if (size_expr && size_expr->GetType()->IsIntegral()) {
+            auto literal = std::dynamic_pointer_cast<LiteralExpr>(size_expr);
+            if (literal && literal->GetLiteralKind() == LiteralExpr::Kind::INT) {
+                array_size = static_cast<size_t>(literal->GetIntValue());
+                has_constant_size = true;
+            }
+        }
+        
+        // Try a completely different approach
+        // Create a new shared_ptr of the right type directly
+        if (has_constant_size) {
+            // If we have a constant size
+            std::shared_ptr<Type> element_type = type;
+            type = std::shared_ptr<Type>(new ArrayType(element_type, array_size));
+        } else {
+            // Otherwise use the expression
+            std::shared_ptr<Type> element_type = type;
+            type = std::shared_ptr<Type>(new ArrayType(element_type, size_expr));
+        }
     }
     
     // Check for initializer
@@ -415,7 +465,11 @@ std::shared_ptr<ParamDecl> Parser::ParseParameterDeclaration() {
     // Check for array notation
     if (Match(TokenKind::LEFT_BRACKET)) {
         Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after array parameter");
-        type = std::make_shared<ArrayType>(type, nullptr);
+        
+        // Create new array type manually without assignment
+        std::shared_ptr<Type> element_type = type;
+        ArrayType* array_type = new ArrayType(element_type, (size_t)0);
+        type = std::shared_ptr<Type>(array_type);
     }
     
     return std::make_shared<ParamDecl>(name, type);
@@ -470,8 +524,10 @@ std::shared_ptr<StructDecl> Parser::ParseStructDeclaration() {
             
             Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after array size");
             
-            // Create array type
-            type = std::make_shared<ArrayType>(type, size_expr);
+            // Create new array type manually without assignment
+            std::shared_ptr<Type> element_type = type;
+            ArrayType* array_type = new ArrayType(element_type, size_expr);
+            type = std::shared_ptr<Type>(array_type);
         }
         
         Consume(TokenKind::SEMICOLON, "Expected ';' after struct field declaration");
@@ -678,4 +734,12 @@ std::shared_ptr<Stmt> Parser::ParseStatement() {
     if (Check(TokenKind::KW_VOID) || Check(TokenKind::KW_BOOL) ||
         Check(TokenKind::KW_CHAR) || Check(TokenKind::KW_SHORT) ||
         Check(TokenKind::KW_INT) || Check(TokenKind::KW_LONG) ||
-        Check(TokenKind::KW_FLOAT) || Check(TokenKind::KW_
+        Check(TokenKind::KW_FLOAT) || Check(TokenKind::KW_DOUBLE) ||
+        Check(TokenKind::KW_UNSIGNED) || Check(TokenKind::KW_STRUCT) ||
+        Check(TokenKind::KW_ENUM)) {
+        return ParseDeclarationStatement();
+    }
+    
+    // Otherwise, this is an expression statement
+    return ParseExpressionStatement();
+}

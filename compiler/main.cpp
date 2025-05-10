@@ -147,100 +147,106 @@ int main(int argc, char** argv) {
     module->setTargetTriple("x86_64-elf");
     */
     
-    try {
-        // Create diagnostic reporter for error messages
-        dsLang::DiagnosticReporter diagReporter;
-        
-        // Tokenize and parse the source code
-        dsLang::Lexer lexer(sourceCode, inputFilename);
-        dsLang::Parser parser(lexer, diagReporter);
-        std::shared_ptr<dsLang::CompilationUnit> program = parser.Parse();
-        
-        if (verbose) {
-            std::cout << "Parsing completed successfully\n";
-        }
-        
-        // Perform semantic analysis
-        auto semanticAnalyzer = dsLang::CreateSemanticAnalyzer(diagReporter);
-        semanticAnalyzer->Analyze(program.get());
-        
-        if (verbose) {
-            std::cout << "Semantic analysis completed successfully\n";
-        }
-        
-        // Generate LLVM IR code - temporarily disabled due to include issues
-        // dsLang::CodeGenerator codegen(inputFilename, "x86_64-elf");
-        // codegen.Generate(static_cast<dsLang::CompilationUnit*>(program.get()));
-        
-        if (verbose) {
-            std::cout << "Code generation phase skipped due to LLVM include issues\n";
-        }
-        
-        /* Comment out LLVM code till we fix include paths
-        // Verify the generated LLVM IR
-        std::string verifyStr;
-        llvm::raw_string_ostream verifyStream(verifyStr);
-        if (llvm::verifyModule(*module, &verifyStream)) {
-            std::cerr << "Error: Generated module is invalid!\n";
-            std::cerr << verifyStr;
-            return 1;
-        }
-        
-        // Get target machine for x86-64
-        std::string targetTriple = "x86_64-elf";
-        std::string error;
-        const llvm::Target* target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
-        
-        if (!target) {
-            std::cerr << "Error looking up target: " << error << "\n";
-            return 1;
-        }
-        
-        llvm::TargetOptions opt;
-        std::unique_ptr<llvm::TargetMachine> targetMachine(
-            target->createTargetMachine(targetTriple, "generic", "", opt, llvm::Reloc::Model::Static));
-        
-        module->setDataLayout(targetMachine->createDataLayout());
-        
-        // Open output file
-        std::error_code EC;
-        llvm::raw_fd_ostream outputFile(outputFilename, EC, llvm::sys::fs::OF_None);
-        
-        if (EC) {
-            std::cerr << "Error opening output file: " << EC.message() << "\n";
-            return 1;
-        }
-        
-        // Set up pass manager
-        llvm::legacy::PassManager pass;
-        
-        // Set output file type
-        auto fileType = outputAssembly ? llvm::CGFT_AssemblyFile : llvm::CGFT_ObjectFile;
-        
-        // Generate code
-        if (targetMachine->addPassesToEmitFile(pass, outputFile, nullptr, fileType)) {
-            std::cerr << "Error: Target machine can't emit a file of this type\n";
-            return 1;
-        }
-        
-        // Run passes
-        pass.run(*module);
-        outputFile.close();
-        */
-        
-        // For now, write a dummy output file to indicate we got this far
-        std::ofstream dummyOutput(outputFilename);
-        dummyOutput << "// Compilation successful up to semantic analysis\n";
-        dummyOutput << "// LLVM code generation disabled due to include path issues\n";
-        dummyOutput.close();
-        
-        if (verbose) {
-            std::cout << "Output written to: " << outputFilename << "\n";
-        }
-        
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << "\n";
+    // Create diagnostic reporter for error messages
+    dsLang::DiagnosticReporter diagReporter;
+    
+    // Tokenize and parse the source code
+    dsLang::Lexer lexer(sourceCode, inputFilename);
+    dsLang::Parser parser(lexer, diagReporter);
+    std::shared_ptr<dsLang::CompilationUnit> program = parser.Parse();
+    
+    // Check if there were any errors during parsing
+    if (diagReporter.HasErrors()) {
+        std::cerr << "Error: Parsing failed with errors\n";
         return 1;
+    }
+    
+    if (verbose) {
+        std::cout << "Parsing completed successfully\n";
+    }
+    
+    // Perform semantic analysis
+    auto semanticAnalyzer = dsLang::CreateSemanticAnalyzer(diagReporter);
+    semanticAnalyzer->Analyze(program.get());
+    
+    // Check if there were any errors during semantic analysis
+    if (diagReporter.HasErrors()) {
+        std::cerr << "Error: Semantic analysis failed with errors\n";
+        return 1;
+    }
+    
+    if (verbose) {
+        std::cout << "Semantic analysis completed successfully\n";
+    }
+    
+    // Generate LLVM IR code - temporarily disabled due to include issues
+    // dsLang::CodeGenerator codegen(inputFilename, "x86_64-elf");
+    // codegen.Generate(static_cast<dsLang::CompilationUnit*>(program.get()));
+    
+    if (verbose) {
+        std::cout << "Code generation phase skipped due to LLVM include issues\n";
+    }
+    
+    /* Comment out LLVM code till we fix include paths
+    // Verify the generated LLVM IR
+    std::string verifyStr;
+    llvm::raw_string_ostream verifyStream(verifyStr);
+    if (llvm::verifyModule(*module, &verifyStream)) {
+        std::cerr << "Error: Generated module is invalid!\n";
+        std::cerr << verifyStr;
+        return 1;
+    }
+    
+    // Get target machine for x86-64
+    std::string targetTriple = "x86_64-elf";
+    std::string error;
+    const llvm::Target* target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+    
+    if (!target) {
+        std::cerr << "Error looking up target: " << error << "\n";
+        return 1;
+    }
+    
+    llvm::TargetOptions opt;
+    std::unique_ptr<llvm::TargetMachine> targetMachine(
+        target->createTargetMachine(targetTriple, "generic", "", opt, llvm::Reloc::Model::Static));
+    
+    module->setDataLayout(targetMachine->createDataLayout());
+    
+    // Open output file
+    std::error_code EC;
+    llvm::raw_fd_ostream outputFile(outputFilename, EC, llvm::sys::fs::OF_None);
+    
+    if (EC) {
+        std::cerr << "Error opening output file: " << EC.message() << "\n";
+        return 1;
+    }
+    
+    // Set up pass manager
+    llvm::legacy::PassManager pass;
+    
+    // Set output file type
+    auto fileType = outputAssembly ? llvm::CGFT_AssemblyFile : llvm::CGFT_ObjectFile;
+    
+    // Generate code
+    if (targetMachine->addPassesToEmitFile(pass, outputFile, nullptr, fileType)) {
+        std::cerr << "Error: Target machine can't emit a file of this type\n";
+        return 1;
+    }
+    
+    // Run passes
+    pass.run(*module);
+    outputFile.close();
+    */
+    
+    // For now, write a dummy output file to indicate we got this far
+    std::ofstream dummyOutput(outputFilename);
+    dummyOutput << "// Compilation successful up to semantic analysis\n";
+    dummyOutput << "// LLVM code generation disabled due to include path issues\n";
+    dummyOutput.close();
+    
+    if (verbose) {
+        std::cout << "Output written to: " << outputFilename << "\n";
     }
     
     return 0;

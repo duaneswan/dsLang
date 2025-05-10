@@ -166,7 +166,11 @@ bool PointerType::IsEqual(const Type* other) const {
  */
 std::string ArrayType::ToString() const {
     std::ostringstream oss;
-    oss << element_type_->ToString() << "[" << size_ << "]";
+    if (has_constant_size_) {
+        oss << element_type_->ToString() << "[" << size_ << "]";
+    } else {
+        oss << element_type_->ToString() << "[]"; // Size is not known yet
+    }
     return oss.str();
 }
 
@@ -179,8 +183,20 @@ bool ArrayType::IsEqual(const Type* other) const {
     }
     
     const ArrayType* other_array = static_cast<const ArrayType*>(other);
-    return size_ == other_array->size_ && 
-           element_type_->IsEqual(other_array->element_type_.get());
+    
+    // If both arrays have constant size, compare the sizes
+    if (has_constant_size_ && other_array->has_constant_size_) {
+        return size_ == other_array->size_ && 
+               element_type_->IsEqual(other_array->element_type_.get());
+    }
+    
+    // If one has constant size and the other doesn't, they're not equal
+    if (has_constant_size_ != other_array->has_constant_size_) {
+        return false;
+    }
+    
+    // Both don't have constant size, just compare element types
+    return element_type_->IsEqual(other_array->element_type_.get());
 }
 
 /**

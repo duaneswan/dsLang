@@ -44,7 +44,8 @@ CodeGenerator::CodeGenerator(const std::string& module_name, const std::string& 
     auto features = "";
     
     llvm::TargetOptions opt;
-    auto rm = std::optional<llvm::Reloc::Model>();
+    // Use std::nullopt instead of std::optional<llvm::Reloc::Model>()
+    llvm::Optional<llvm::Reloc::Model> rm;
     target_machine_ = std::unique_ptr<llvm::TargetMachine>(
         target->createTargetMachine(target_triple_, cpu, features, opt, rm));
     

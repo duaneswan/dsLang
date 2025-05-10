@@ -34,6 +34,7 @@ public:
     void Analyze(CompilationUnit* unit);
     
     // ASTVisitor implementation - all empty for now
+    void VisitCompilationUnit(CompilationUnit* unit) override;
     void VisitBinaryExpr(BinaryExpr* expr) override;
     void VisitUnaryExpr(UnaryExpr* expr) override;
     void VisitLiteralExpr(LiteralExpr* expr) override;
