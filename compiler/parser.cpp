@@ -807,4 +807,50 @@ std::shared_ptr<ContinueStmt> Parser::ParseContinueStatement() {
  * Expression grammar (in decreasing precedence):
  * - Primary: literals, variables, parenthesized expressions
  * - Unary: !, ~, -, ++, --, *, &
- * - Multiplic
+ * - Multiplicative: *, /, %
+ * - Additive: +, -
+ * - Shift: <<, >>
+ * - Relational: <, >, <=, >=
+ * - Equality: ==, !=
+ * - BitwiseAND: &
+ * - BitwiseXOR: ^
+ * - BitwiseOR: |
+ * - LogicalAND: &&
+ * - LogicalOR: ||
+ * - Assignment: =
+ */
+std::shared_ptr<Expr> Parser::ParseExpression() {
+    return ParseAssignment();
+}
+
+/**
+ * ParseAssignment - Parse an assignment expression
+ */
+std::shared_ptr<Expr> Parser::ParseAssignment() {
+    auto expr = ParseLogicalOr();
+    
+    if (Match(TokenKind::EQUAL)) {
+        auto value = ParseAssignment();  // Right-associative
+        
+        // Check if the left-hand side is a valid assignment target
+        if (std::dynamic_pointer_cast<VarExpr>(expr) ||
+            std::dynamic_pointer_cast<SubscriptExpr>(expr) ||
+            std::dynamic_pointer_cast<UnaryExpr>(expr)) {
+            return std::make_shared<AssignExpr>(expr, value);
+        }
+        
+        ReportError("Invalid assignment target");
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseLogicalOr - Parse a logical OR expression
+ */
+std::shared_ptr<Expr> Parser::ParseLogicalOr() {
+    auto expr = ParseLogicalAnd();
+    
+    while (Match(TokenKind::PIPE_PIPE)) {
+        auto right = ParseLogicalAnd();
+        auto type = std::make_shared<BoolType>();
