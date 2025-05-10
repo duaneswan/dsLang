@@ -1,0 +1,126 @@
+/* kernel.ds - Example dsOS kernel
+ *
+ * This is an example kernel written in dsLang for the dsOS operating system.
+ * It demonstrates basic functionality like console output and memory management.
+ */
+
+// External functions from the standard library
+extern void clear_screen();
+extern void puts(const char* str);
+extern void putchar(char c);
+extern int printf(const char* format, ...);
+extern void* malloc(unsigned long size);
+extern void free(void* ptr);
+extern void* memset(void* dest, int value, unsigned long count);
+
+// Global variables
+int boot_status = 0;
+const char* welcome_message = "Welcome to dsOS!";
+
+/**
+ * Draw a simple box on the screen
+ */
+void draw_box(int x, int y, int width, int height, char border_char) {
+    // Draw top border
+    for (int i = 0; i < width; i++) {
+        // Set cursor position and print character
+        // (In a real implementation, we would have a set_cursor function)
+        // For now, we'll just print each line
+        
+        putchar(border_char);
+    }
+    putchar('\n');
+    
+    // Draw sides
+    for (int i = 0; i < height - 2; i++) {
+        putchar(border_char);
+        for (int j = 0; j < width - 2; j++) {
+            putchar(' ');
+        }
+        putchar(border_char);
+        putchar('\n');
+    }
+    
+    // Draw bottom border
+    for (int i = 0; i < width; i++) {
+        putchar(border_char);
+    }
+    putchar('\n');
+}
+
+/**
+ * Test memory allocation
+ */
+void test_memory() {
+    // Allocate an array
+    int* numbers = (int*)malloc(10 * sizeof(int));
+    
+    // Check if allocation succeeded
+    if (numbers) {
+        // Initialize array
+        for (int i = 0; i < 10; i++) {
+            numbers[i] = i * i;
+        }
+        
+        // Print array values
+        puts("Memory test:");
+        for (int i = 0; i < 10; i++) {
+            printf("  numbers[%d] = %d\n", i, numbers[i]);
+        }
+        
+        // Free memory
+        free(numbers);
+        puts("Memory freed successfully.");
+    } else {
+        puts("Memory allocation failed!");
+    }
+}
+
+/**
+ * Main entry point for the kernel
+ * This is called by the boot assembly after system initialization
+ */
+int kernel_main() {
+    // Clear the screen
+    clear_screen();
+    
+    // Print welcome message
+    puts(welcome_message);
+    puts("This kernel was written in dsLang!");
+    putchar('\n');
+    
+    // Draw a box
+    puts("Drawing a box:");
+    draw_box(5, 5, 20, 5, '#');
+    putchar('\n');
+    
+    // Test memory allocation
+    test_memory();
+    
+    // Print system status
+    printf("\nSystem status: %d\n", boot_status);
+    
+    // Engage in an infinite loop to keep the kernel running
+    puts("\nKernel initialized. System halted.");
+    while (1) {
+        // This is where we would handle interrupts, process management, etc.
+        // For now, just loop indefinitely
+    }
+    
+    // We'll never reach this point, but good practice to return a value
+    return 0;
+}
+
+/**
+ * Panic function for handling fatal errors
+ */
+void kernel_panic(const char* message) {
+    // Print error message
+    printf("\nKERNEL PANIC: %s\n", message);
+    
+    // Halt the system
+    while (1) {
+        // Halt CPU
+        asm("cli; hlt");
+    }
+}
