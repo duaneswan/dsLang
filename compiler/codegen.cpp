@@ -243,6 +243,11 @@ void CodeGenerator::EndScope() {
  * ConvertType - Convert a dsLang type to an LLVM type
  */
 llvm::Type* CodeGenerator::ConvertType(const std::shared_ptr<Type>& type) {
+    if (!type) {
+        // Handle null type pointer - return void type as fallback
+        return llvm::Type::getVoidTy(*context_);
+    }
+    
     switch (type->GetKind()) {
         case Type::Kind::VOID:
             return llvm::Type::getVoidTy(*context_);
