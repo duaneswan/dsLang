@@ -878,4 +878,7 @@ std::shared_ptr<Expr> Parser::ParseLogicalAnd() {
 /**
  * ParseBitwiseOr - Parse a bitwise OR expression
  */
-std::shared_ptr
+std::shared_ptr<Expr> Parser::ParseBitwiseOr() {
+    auto expr = ParseBitwiseXor();
+    
+    while (Match(Token
