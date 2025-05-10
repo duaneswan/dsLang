@@ -367,13 +367,13 @@ std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration() {
     
     if (Match(TokenKind::SEMICOLON)) {
         // Method declaration (no body)
-        return std::make_shared<MethodDecl>(selector, return_type, parameters, body);
+        return std::make_shared<MethodDecl>(selector, receiver, return_type, parameters, body);
     }
     
     // Method definition (with body)
     body = ParseBlockStatement();
     
-    return std::make_shared<MethodDecl>(selector, return_type, parameters, body);
+    return std::make_shared<MethodDecl>(selector, receiver, return_type, parameters, body);
 }
 
 /**
@@ -418,16 +418,11 @@ std::shared_ptr<VarDecl> Parser::ParseVariableDeclaration() {
             }
         }
         
-        // Try a completely different approach
-        // Create a new shared_ptr of the right type directly
+        // Create array type using the helper function
         if (has_constant_size) {
-            // If we have a constant size
-            std::shared_ptr<Type> element_type = type;
-            type = std::shared_ptr<Type>(new ArrayType(element_type, array_size));
+            type = CreateArrayType(type, array_size);
         } else {
-            // Otherwise use the expression
-            std::shared_ptr<Type> element_type = type;
-            type = std::shared_ptr<Type>(new ArrayType(element_type, size_expr));
+            type = CreateArrayType(type, size_expr);
         }
     }
     
@@ -466,10 +461,8 @@ std::shared_ptr<ParamDecl> Parser::ParseParameterDeclaration() {
     if (Match(TokenKind::LEFT_BRACKET)) {
         Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after array parameter");
         
-        // Create new array type manually without assignment
-        std::shared_ptr<Type> element_type = type;
-        ArrayType* array_type = new ArrayType(element_type, (size_t)0);
-        type = std::shared_ptr<Type>(array_type);
+        // Create array type using zero size (for parameters, size is not needed)
+        type = CreateArrayType(type, (size_t)0);
     }
     
     return std::make_shared<ParamDecl>(name, type);
@@ -524,10 +517,8 @@ std::shared_ptr<StructDecl> Parser::ParseStructDeclaration() {
             
             Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after array size");
             
-            // Create new array type manually without assignment
-            std::shared_ptr<Type> element_type = type;
-            ArrayType* array_type = new ArrayType(element_type, size_expr);
-            type = std::shared_ptr<Type>(array_type);
+            // Create array type using the helper function
+            type = CreateArrayType(type, size_expr);
         }
         
         Consume(TokenKind::SEMICOLON, "Expected ';' after struct field declaration");
@@ -595,6 +586,33 @@ std::shared_ptr<EnumDecl> Parser::ParseEnumDeclaration() {
     // Assume a base type of int for all enums for now
     auto base_type = std::make_shared<IntType>();
     return std::make_shared<EnumDecl>(name, base_type, enumerators);
+}
+
+/**
+ * ParseCastExpression - Parse a cast expression
+ */
+std::shared_ptr<Expr> Parser::ParseCastExpression() {
+    // Save the current token position in case we need to backtrack
+    Token start_token = current_token_;
+    
+    // Consume the opening parenthesis
+    Consume(TokenKind::LEFT_PAREN, "Expected '(' at start of cast expression");
+    
+    // Try to parse the type
+    auto maybe_type = ParseType();
+    if (maybe_type && Match(TokenKind::RIGHT_PAREN)) {
+        // If we successfully parsed a type and found a closing parenthesis,
+        // it's a cast expression
+        auto expr_to_cast = ParseExpression();
+        
+        // Create a new cast expression
+        return std::make_shared<CastExpr>(expr_to_cast, maybe_type);
+    } else {
+        // If parsing type fails, it's a parenthesized expression, not a cast
+        // Reset the token index and continue
+        current_token_ = start_token;
+        return nullptr;
+    }
 }
 
 /**
@@ -840,43 +858,4 @@ std::shared_ptr<ForStmt> Parser::ParseForStatement() {
     // Parse body
     auto body = ParseStatement();
     
-    return std::make_shared<ForStmt>(init, condition, increment, body);
-}
-
-/**
- * ParseReturnStatement - Parse a return statement
- */
-std::shared_ptr<ReturnStmt> Parser::ParseReturnStatement() {
-    std::shared_ptr<Expr> value = nullptr;
-    
-    // Check if the return statement has a value
-    if (!Check(TokenKind::SEMICOLON)) {
-        value = ParseExpression();
-    }
-    
-    Consume(TokenKind::SEMICOLON, "Expected ';' after return value");
-    
-    return std::make_shared<ReturnStmt>(value);
-}
-
-/**
- * ParseBreakStatement - Parse a break statement
- */
-std::shared_ptr<BreakStmt> Parser::ParseBreakStatement() {
-    Consume(TokenKind::SEMICOLON, "Expected ';' after 'break'");
-    
-    return std::make_shared<BreakStmt>();
-}
-
-/**
- * ParseContinueStatement - Parse a continue statement
- */
-std::shared_ptr<ContinueStmt> Parser::ParseContinueStatement() {
-    Consume(TokenKind::SEMICOLON, "Expected ';' after 'continue'");
-    
-    return std::make_shared<ContinueStmt>();
-}
-
-/**
- * ParseDeclarationStatement - Parse a declaration statement
- */
+    return std::make_shared<ForStmt>(init
