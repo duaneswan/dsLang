@@ -1000,6 +1000,8 @@ void CodeGenerator::VisitCallExpr(CallExpr* expr) {
     // Check number of arguments
     if (callee->arg_size() != expr->GetArgs().size() && !callee->isVarArg()) {
         std::cerr << "Incorrect number of arguments to function: " << expr->GetCallee() << std::endl;
+        // Instead of throwing an exception, push a dummy value and return
+        value_stack_.push(llvm::UndefValue::get(ConvertType(expr->GetType())));
         return;
     }
     
