@@ -367,13 +367,13 @@ std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration() {
     
     if (Match(TokenKind::SEMICOLON)) {
         // Method declaration (no body)
-        return std::make_shared<MethodDecl>(selector, receiver, return_type, parameters, body);
+        return std::make_shared<MethodDecl>(selector, return_type, parameters, body);
     }
     
     // Method definition (with body)
     body = ParseBlockStatement();
     
-    return std::make_shared<MethodDecl>(selector, receiver, return_type, parameters, body);
+    return std::make_shared<MethodDecl>(selector, return_type, parameters, body);
 }
 
 /**
@@ -598,33 +598,6 @@ std::shared_ptr<EnumDecl> Parser::ParseEnumDeclaration() {
 }
 
 /**
- * ParseCastExpression - Parse a cast expression
- */
-std::shared_ptr<Expr> Parser::ParseCastExpression() {
-    // Save the current token position in case we need to backtrack
-    Token start_token = current_token_;
-    
-    // Consume the opening parenthesis
-    Consume(TokenKind::LEFT_PAREN, "Expected '(' at start of cast expression");
-    
-    // Try to parse the type
-    auto maybe_type = ParseType();
-    if (maybe_type && Match(TokenKind::RIGHT_PAREN)) {
-        // If we successfully parsed a type and found a closing parenthesis,
-        // it's a cast expression
-        auto expr_to_cast = ParseExpression();
-        
-        // Create a new cast expression
-        return std::make_shared<CastExpr>(expr_to_cast, maybe_type);
-    } else {
-        // If parsing type fails, it's a parenthesized expression, not a cast
-        // Reset the token index and continue
-        current_token_ = start_token;
-        return nullptr;
-    }
-}
-
-/**
  * ParseType - Parse a type
  */
 std::shared_ptr<Type> Parser::ParseType() {
@@ -765,3 +738,145 @@ std::shared_ptr<Stmt> Parser::ParseStatement() {
     // Otherwise, this is an expression statement
     return ParseExpressionStatement();
 }
+
+/**
+ * ParseBlockStatement - Parse a block statement
+ */
+std::shared_ptr<BlockStmt> Parser::ParseBlockStatement() {
+    std::vector<std::shared_ptr<Stmt>> statements;
+    
+    // Parse statements until we reach the end of the block
+    while (!Check(TokenKind::RIGHT_BRACE) && !IsAtEnd()) {
+        auto stmt = ParseStatement();
+        if (stmt) {
+            statements.push_back(stmt);
+        }
+    }
+    
+    Consume(TokenKind::RIGHT_BRACE, "Expected '}' after block");
+    
+    return std::make_shared<BlockStmt>(statements);
+}
+
+/**
+ * ParseExpressionStatement - Parse an expression statement
+ */
+std::shared_ptr<ExprStmt> Parser::ParseExpressionStatement() {
+    auto expr = ParseExpression();
+    
+    Consume(TokenKind::SEMICOLON, "Expected ';' after expression");
+    
+    return std::make_shared<ExprStmt>(expr);
+}
+
+/**
+ * ParseIfStatement - Parse an if statement
+ */
+std::shared_ptr<IfStmt> Parser::ParseIfStatement() {
+    Consume(TokenKind::LEFT_PAREN, "Expected '(' after 'if'");
+    auto condition = ParseExpression();
+    Consume(TokenKind::RIGHT_PAREN, "Expected ')' after if condition");
+    
+    auto then_stmt = ParseStatement();
+    std::shared_ptr<Stmt> else_stmt = nullptr;
+    
+    if (Match(TokenKind::KW_ELSE)) {
+        else_stmt = ParseStatement();
+    }
+    
+    return std::make_shared<IfStmt>(condition, then_stmt, else_stmt);
+}
+
+/**
+ * ParseWhileStatement - Parse a while statement
+ */
+std::shared_ptr<WhileStmt> Parser::ParseWhileStatement() {
+    Consume(TokenKind::LEFT_PAREN, "Expected '(' after 'while'");
+    auto condition = ParseExpression();
+    Consume(TokenKind::RIGHT_PAREN, "Expected ')' after while condition");
+    
+    auto body = ParseStatement();
+    
+    return std::make_shared<WhileStmt>(condition, body);
+}
+
+/**
+ * ParseForStatement - Parse a for statement
+ */
+std::shared_ptr<ForStmt> Parser::ParseForStatement() {
+    Consume(TokenKind::LEFT_PAREN, "Expected '(' after 'for'");
+    
+    // Parse initialization
+    std::shared_ptr<Stmt> init = nullptr;
+    if (!Check(TokenKind::SEMICOLON)) {
+        if (Check(TokenKind::KW_VOID) || Check(TokenKind::KW_BOOL) ||
+            Check(TokenKind::KW_CHAR) || Check(TokenKind::KW_SHORT) ||
+            Check(TokenKind::KW_INT) || Check(TokenKind::KW_LONG) ||
+            Check(TokenKind::KW_FLOAT) || Check(TokenKind::KW_DOUBLE) ||
+            Check(TokenKind::KW_UNSIGNED) || Check(TokenKind::KW_STRUCT) ||
+            Check(TokenKind::KW_ENUM)) {
+            init = ParseDeclarationStatement();
+        } else {
+            init = ParseExpressionStatement();
+        }
+    } else {
+        Consume(TokenKind::SEMICOLON, "Expected ';' after for initialization");
+    }
+    
+    // Parse condition
+    std::shared_ptr<Expr> condition = nullptr;
+    if (!Check(TokenKind::SEMICOLON)) {
+        condition = ParseExpression();
+    }
+    Consume(TokenKind::SEMICOLON, "Expected ';' after for condition");
+    
+    // Parse increment
+    std::shared_ptr<Expr> increment = nullptr;
+    if (!Check(TokenKind::RIGHT_PAREN)) {
+        increment = ParseExpression();
+    }
+    Consume(TokenKind::RIGHT_PAREN, "Expected ')' after for clauses");
+    
+    // Parse body
+    auto body = ParseStatement();
+    
+    return std::make_shared<ForStmt>(init, condition, increment, body);
+}
+
+/**
+ * ParseReturnStatement - Parse a return statement
+ */
+std::shared_ptr<ReturnStmt> Parser::ParseReturnStatement() {
+    std::shared_ptr<Expr> value = nullptr;
+    
+    // Check if the return statement has a value
+    if (!Check(TokenKind::SEMICOLON)) {
+        value = ParseExpression();
+    }
+    
+    Consume(TokenKind::SEMICOLON, "Expected ';' after return value");
+    
+    return std::make_shared<ReturnStmt>(value);
+}
+
+/**
+ * ParseBreakStatement - Parse a break statement
+ */
+std::shared_ptr<BreakStmt> Parser::ParseBreakStatement() {
+    Consume(TokenKind::SEMICOLON, "Expected ';' after 'break'");
+    
+    return std::make_shared<BreakStmt>();
+}
+
+/**
+ * ParseContinueStatement - Parse a continue statement
+ */
+std::shared_ptr<ContinueStmt> Parser::ParseContinueStatement() {
+    Consume(TokenKind::SEMICOLON, "Expected ';' after 'continue'");
+    
+    return std::make_shared<ContinueStmt>();
+}
+
+/**
+ * ParseDeclarationStatement - Parse a declaration statement
+ */
