@@ -230,9 +230,8 @@ std::shared_ptr<Type> Parser::ParseType() {
         Advance();
         
         // Try to find existing struct type
-        auto it = struct_types_.find(name);
-        if (it != struct_types_.end()) {
-            auto type = it->second;
+        if (struct_types_.find(name) != struct_types_.end()) {
+            auto type = struct_types_[name];
             
             // Check for pointer type
             while (Match(TokenKind::STAR)) {
@@ -244,7 +243,7 @@ std::shared_ptr<Type> Parser::ParseType() {
         
         // Create a new struct type
         auto type = std::make_shared<StructType>(name);
-        struct_types_.insert(std::make_pair(name, type));
+        struct_types_[name] = type;
         
         // Check for pointer type
         while (Match(TokenKind::STAR)) {
@@ -263,9 +262,8 @@ std::shared_ptr<Type> Parser::ParseType() {
         Advance();
         
         // Try to find existing enum type
-        auto it = enum_types_.find(name);
-        if (it != enum_types_.end()) {
-            auto type = it->second;
+        if (enum_types_.find(name) != enum_types_.end()) {
+            auto type = enum_types_[name];
             
             // Check for pointer type
             while (Match(TokenKind::STAR)) {
@@ -277,7 +275,7 @@ std::shared_ptr<Type> Parser::ParseType() {
         
         // Create a new enum type
         auto type = std::make_shared<EnumType>(name);
-        enum_types_.insert(std::make_pair(name, type));
+        enum_types_[name] = type;
         
         // Check for pointer type
         while (Match(TokenKind::STAR)) {
@@ -875,8 +873,3 @@ std::shared_ptr<ForStmt> Parser::ParseForStatement() {
  */
 std::shared_ptr<ReturnStmt> Parser::ParseReturnStatement() {
     std::shared_ptr<Expr> value = nullptr;
-    
-    // Check if the return statement has a value
-    if (!Check(TokenKind::SEMICOLON)) {
-        value = ParseExpression();
-    }
