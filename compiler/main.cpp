@@ -160,10 +160,12 @@ int main(int argc, char** argv) {
             std::cout << "Parsing completed successfully\n";
         }
         
-        // Skip semantic analysis for now - SemanticAnalyzer is abstract 
-        // and can't be directly instantiated
+        // Perform semantic analysis
+        auto semanticAnalyzer = dsLang::CreateSemanticAnalyzer(diagReporter);
+        semanticAnalyzer->Analyze(program.get());
+        
         if (verbose) {
-            std::cout << "Semantic analysis phase skipped\n";
+            std::cout << "Semantic analysis completed successfully\n";
         }
         
         // Generate LLVM IR code - temporarily disabled due to include issues
