@@ -873,6 +873,3 @@ std::shared_ptr<Expr> Parser::ParseAssignment() {
     
     if (Match(TokenKind::EQUAL)) {
         auto value = ParseAssignment();
-        
-        // Check that the left-hand side is a valid assignment target
-        if (std::dynamic_pointer_cast<VarExpr
