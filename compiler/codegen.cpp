@@ -44,10 +44,10 @@ CodeGenerator::CodeGenerator(const std::string& module_name, const std::string& 
     auto features = "";
     
     llvm::TargetOptions opt;
-    // Use std::nullopt instead of std::optional<llvm::Reloc::Model>()
-    llvm::Optional<llvm::Reloc::Model> rm;
+    // Use a static relocation model
+    auto reloc_model = llvm::Reloc::Static;
     target_machine_ = std::unique_ptr<llvm::TargetMachine>(
-        target->createTargetMachine(target_triple_, cpu, features, opt, rm));
+        target->createTargetMachine(target_triple_, cpu, features, opt, reloc_model));
     
     module_->setDataLayout(target_machine_->createDataLayout());
 

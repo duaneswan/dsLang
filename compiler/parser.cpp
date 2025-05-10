@@ -541,66 +541,88 @@ std::shared_ptr<StructDecl> Parser::ParseStructDeclaration() {
     return std::make_shared<StructDecl>(name, fields);
 }
 
-    /**
-     * ParseEnumDeclaration - Parse an enum declaration
-     */
-    std::shared_ptr<EnumDecl> Parser::ParseEnumDeclaration() {
-        // Parse enum name
-        if (!Check(TokenKind::IDENTIFIER)) {
-            ReportError("Expected enum name");
-            return nullptr;
-        }
-        
-        std::string name = Peek().GetLexeme();
-        Advance();
-        
-        // Parse enum body
-        Consume(TokenKind::LEFT_BRACE, "Expected '{' after enum name");
-        
-        // Use int64_t for enum values as required by EnumDecl constructor
-        std::vector<std::pair<std::string, int64_t>> enumerators;
-        int64_t next_value = 0;
-        
-        if (!Check(TokenKind::RIGHT_BRACE)) {
-            do {
-                if (!Check(TokenKind::IDENTIFIER)) {
-                    ReportError("Expected enumerator name");
-                    return nullptr;
-                }
-                
-                std::string enum_name = Peek().GetLexeme();
-                Advance();
-                
-                int64_t value = next_value++;
-                
-                if (Match(TokenKind::EQUAL)) {
-                    // For simplicity, we only handle integer literals in enum values
-                    // A more complete implementation would evaluate expressions
-                    if (Check(TokenKind::INT_LITERAL)) {
-                        try {
-                            value = std::stoll(Peek().GetLexeme());
-                            next_value = value + 1;
-                        } catch (const std::exception& e) {
-                            ReportError("Invalid integer literal in enum value");
-                        }
-                        Advance();
-                    } else {
-                        ReportError("Expected integer literal for enum value");
-                        Advance(); // Skip the expression
-                    }
-                }
-                
-                enumerators.push_back(std::make_pair(enum_name, value));
-            } while (Match(TokenKind::COMMA) && !Check(TokenKind::RIGHT_BRACE));
-        }
-        
-        Consume(TokenKind::RIGHT_BRACE, "Expected '}' after enum body");
-        Consume(TokenKind::SEMICOLON, "Expected ';' after enum declaration");
-        
-        // Assume a base type of int for all enums for now
-        auto base_type = std::make_shared<IntType>();
-        return std::make_shared<EnumDecl>(name, base_type, enumerators);
+/**
+ * ParseEnumDeclaration - Parse an enum declaration
+ */
+std::shared_ptr<EnumDecl> Parser::ParseEnumDeclaration() {
+    // Parse enum name
+    if (!Check(TokenKind::IDENTIFIER)) {
+        ReportError("Expected enum name");
+        return nullptr;
     }
+    
+    std::string name = Peek().GetLexeme();
+    Advance();
+    
+    // Parse enum body
+    Consume(TokenKind::LEFT_BRACE, "Expected '{' after enum name");
+    
+    // Use int64_t for enum values as required by EnumDecl constructor
+    std::vector<std::pair<std::string, int64_t>> enumerators;
+    int64_t next_value = 0;
+    
+    if (!Check(TokenKind::RIGHT_BRACE)) {
+        do {
+            if (!Check(TokenKind::IDENTIFIER)) {
+                ReportError("Expected enumerator name");
+                return nullptr;
+            }
+            
+            std::string enum_name = Peek().GetLexeme();
+            Advance();
+            
+            int64_t value = next_value++;
+            
+            if (Match(TokenKind::EQUAL)) {
+                // For simplicity, we only handle integer literals in enum values
+                // A more complete implementation would evaluate expressions
+                if (Check(TokenKind::INT_LITERAL)) {
+                    value = std::stoll(Peek().GetLexeme());
+                    Advance();
+                    next_value = value + 1;
+                } else {
+                    ReportError("Expected integer literal for enum value");
+                }
+            }
+            
+            enumerators.push_back(std::make_pair(enum_name, value));
+        } while (Match(TokenKind::COMMA) && !Check(TokenKind::RIGHT_BRACE));
+    }
+    
+    Consume(TokenKind::RIGHT_BRACE, "Expected '}' after enum body");
+    Consume(TokenKind::SEMICOLON, "Expected ';' after enum declaration");
+    
+    // Assume a base type of int for all enums for now
+    auto base_type = std::make_shared<IntType>();
+    return std::make_shared<EnumDecl>(name, base_type, enumerators);
+}
+
+/**
+ * ParseCastExpression - Parse a cast expression
+ */
+std::shared_ptr<Expr> Parser::ParseCastExpression() {
+    // Save the current token position in case we need to backtrack
+    Token start_token = current_token_;
+    
+    // Consume the opening parenthesis
+    Consume(TokenKind::LEFT_PAREN, "Expected '(' at start of cast expression");
+    
+    // Try to parse the type
+    auto maybe_type = ParseType();
+    if (maybe_type && Match(TokenKind::RIGHT_PAREN)) {
+        // If we successfully parsed a type and found a closing parenthesis,
+        // it's a cast expression
+        auto expr_to_cast = ParseExpression();
+        
+        // Create a new cast expression
+        return std::make_shared<CastExpr>(expr_to_cast, maybe_type);
+    } else {
+        // If parsing type fails, it's a parenthesized expression, not a cast
+        // Reset the token index and continue
+        current_token_ = start_token;
+        return nullptr;
+    }
+}
 
 /**
  * ParseType - Parse a type
