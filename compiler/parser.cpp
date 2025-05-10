@@ -79,16 +79,6 @@ Token Parser::Peek() const {
 }
 
 /**
- * Peek - Peek at a token offset from the current token
- */
-Token Parser::Peek(int offset) const {
-    // We don't actually have a way to look back at previous tokens in our implementation
-    // This would require storing a token history
-    // For now, just return the current token
-    return current_token_;
-}
-
-/**
  * PeekNext - Peek at the next token
  */
 Token Parser::PeekNext() const {
@@ -228,7 +218,29 @@ std::shared_ptr<Type> Parser::ParseType() {
         Match(TokenKind::KW_INT) || Match(TokenKind::KW_LONG) ||
         Match(TokenKind::KW_FLOAT) || Match(TokenKind::KW_DOUBLE)) {
         
-        auto type = CreateType(Peek(-1), is_unsigned);
+        // Note: Match() advances the token, so we need to use the previously consumed token
+        Token token = current_token_;
+        // Get the previous token's kind
+        TokenKind prevKind = token.GetKind();
+        // Adjust for the fact that Match() already advanced
+        switch (prevKind) {
+            case TokenKind::KW_VOID:
+            case TokenKind::KW_BOOL:
+            case TokenKind::KW_CHAR:
+            case TokenKind::KW_SHORT:
+            case TokenKind::KW_INT:
+            case TokenKind::KW_LONG:
+            case TokenKind::KW_FLOAT:
+            case TokenKind::KW_DOUBLE:
+                // Already handled by Match(), keep going
+                break;
+            default:
+                // Use the previous token, which is the type token
+                token = lexer_.GetNextToken(); // This actually gets the current token
+                break;
+        }
+        
+        auto type = CreateType(token, is_unsigned);
         
         // Check for pointer type
         while (Match(TokenKind::STAR)) {
@@ -879,22 +891,4 @@ std::shared_ptr<Expr> Parser::ParseExpression() {
 std::shared_ptr<Expr> Parser::ParseAssignment() {
     auto expr = ParseLogicalOr();
     
-    if (Match(TokenKind::EQUAL)) {
-        auto value = ParseAssignment();
-        
-        // Check that the left-hand side is a valid assignment target
-        if (std::dynamic_pointer_cast<VarExpr>(expr) ||
-            std::dynamic_pointer_cast<SubscriptExpr>(expr)) {
-            return std::make_shared<AssignExpr>(expr, value);
-        }
-        
-        ReportError("Invalid assignment target");
-    }
-    
-    return expr;
-}
-
-/**
- * ParseLogicalOr - Parse a logical OR expression
- */
-std::shared_ptr
+    if (Match(TokenKind::EQUAL
