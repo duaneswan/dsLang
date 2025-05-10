@@ -190,6 +190,78 @@ void Parser::Synchronize() {
 }
 
 //===----------------------------------------------------------------------===//
+// Type Parsing
+//===----------------------------------------------------------------------===//
+
+/**
+ * ParseType - Parse a type
+ */
+std::shared_ptr<Type> Parser::ParseType() {
+    bool is_unsigned = false;
+    
+    // Check for 'unsigned' modifier
+    if (Match(TokenKind::KW_UNSIGNED)) {
+        is_unsigned = true;
+    }
+    
+    // Parse the base type
+    if (Check(TokenKind::KW_VOID) || Check(TokenKind::KW_BOOL) ||
+        Check(TokenKind::KW_CHAR) || Check(TokenKind::KW_SHORT) ||
+        Check(TokenKind::KW_INT) || Check(TokenKind::KW_LONG) ||
+        Check(TokenKind::KW_FLOAT) || Check(TokenKind::KW_DOUBLE)) {
+        Token type_token = Peek();
+        Advance();
+        auto type = CreateType(type_token, is_unsigned);
+        
+        // Check for pointer type
+        while (Match(TokenKind::STAR)) {
+            type = std::make_shared<PointerType>(type);
+        }
+        
+        return type;
+    } else if (Match(TokenKind::KW_STRUCT)) {
+        // Struct type
+        if (!Check(TokenKind::IDENTIFIER)) {
+            ReportError("Expected struct name");
+            return nullptr;
+        }
+        
+        std::string name = Peek().GetLexeme();
+        Advance();
+        
+        auto type = std::make_shared<StructType>(name);
+        
+        // Check for pointer type
+        while (Match(TokenKind::STAR)) {
+            type = std::make_shared<PointerType>(type);
+        }
+        
+        return type;
+    } else if (Match(TokenKind::KW_ENUM)) {
+        // Enum type
+        if (!Check(TokenKind::IDENTIFIER)) {
+            ReportError("Expected enum name");
+            return nullptr;
+        }
+        
+        std::string name = Peek().GetLexeme();
+        Advance();
+        
+        auto type = std::make_shared<EnumType>(name);
+        
+        // Check for pointer type
+        while (Match(TokenKind::STAR)) {
+            type = std::make_shared<PointerType>(type);
+        }
+        
+        return type;
+    }
+    
+    ReportError("Expected type");
+    return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
 
@@ -239,14 +311,14 @@ std::shared_ptr<Decl> Parser::ParseDeclaration() {
         
         // Check if this is a function declaration
         if (Check(TokenKind::LEFT_PAREN)) {
-            return ParseFunctionDeclaration();
+            return ParseFunctionDeclaration(type, name);
         }
         
         // Otherwise, it's a variable declaration
-        return ParseVariableDeclaration();
+        return ParseVariableDeclaration(type, name);
     } else if (Check(TokenKind::LEFT_BRACKET)) {
         // Could be a method declaration (Objective-C style)
-        return ParseMethodDeclaration();
+        return ParseMethodDeclaration(type);
     }
     
     ReportError("Expected identifier or method name after type");
@@ -256,22 +328,7 @@ std::shared_ptr<Decl> Parser::ParseDeclaration() {
 /**
  * ParseFunctionDeclaration - Parse a function declaration
  */
-std::shared_ptr<FuncDecl> Parser::ParseFunctionDeclaration() {
-    // Get the return type
-    auto return_type = ParseType();
-    if (!return_type) {
-        ReportError("Expected return type for function");
-        return nullptr;
-    }
-    
-    // Get the function name
-    if (!Check(TokenKind::IDENTIFIER)) {
-        ReportError("Expected function name");
-        return nullptr;
-    }
-    
-    std::string name = Peek().GetLexeme();
-    Advance();
+std::shared_ptr<FuncDecl> Parser::ParseFunctionDeclaration(std::shared_ptr<Type> return_type, const std::string& name) {
     // Consume the opening parenthesis
     Consume(TokenKind::LEFT_PAREN, "Expected '(' after function name");
     
@@ -307,14 +364,7 @@ std::shared_ptr<FuncDecl> Parser::ParseFunctionDeclaration() {
 /**
  * ParseMethodDeclaration - Parse a method declaration (Objective-C style)
  */
-std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration() {
-    // Get the return type
-    auto return_type = ParseType();
-    if (!return_type) {
-        ReportError("Expected return type for method");
-        return nullptr;
-    }
-    
+std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration(std::shared_ptr<Type> return_type) {
     // Consume the opening bracket
     Consume(TokenKind::LEFT_BRACKET, "Expected '[' at start of method declaration");
     
@@ -380,22 +430,7 @@ std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration() {
 /**
  * ParseVariableDeclaration - Parse a variable declaration
  */
-std::shared_ptr<VarDecl> Parser::ParseVariableDeclaration() {
-    // Get the variable type
-    auto type = ParseType();
-    if (!type) {
-        ReportError("Expected type for variable declaration");
-        return nullptr;
-    }
-    
-    // Get the variable name
-    if (!Check(TokenKind::IDENTIFIER)) {
-        ReportError("Expected variable name");
-        return nullptr;
-    }
-    
-    std::string name = Peek().GetLexeme();
-    Advance();
+std::shared_ptr<VarDecl> Parser::ParseVariableDeclaration(std::shared_ptr<Type> type, const std::string& name) {
     // Check for array declaration
     if (Match(TokenKind::LEFT_BRACKET)) {
         // Array type
@@ -678,8 +713,24 @@ std::shared_ptr<ExprStmt> Parser::ParseExpressionStatement() {
  * ParseDeclarationStatement - Parse a declaration statement
  */
 std::shared_ptr<DeclStmt> Parser::ParseDeclarationStatement() {
-    // Parse a variable declaration
-    auto decl = ParseVariableDeclaration();
+    // Get the variable type
+    auto type = ParseType();
+    if (!type) {
+        ReportError("Expected type for variable declaration");
+        return nullptr;
+    }
+    
+    // Get the variable name
+    if (!Check(TokenKind::IDENTIFIER)) {
+        ReportError("Expected variable name");
+        return nullptr;
+    }
+    
+    std::string name = Peek().GetLexeme();
+    Advance();
+    
+    // Parse the rest of the variable declaration
+    auto decl = ParseVariableDeclaration(type, name);
     if (!decl) {
         ReportError("Expected variable declaration");
         return nullptr;
@@ -820,65 +871,4 @@ std::shared_ptr<ContinueStmt> Parser::ParseContinueStatement() {
  * - Assignment: =
  */
 std::shared_ptr<Expr> Parser::ParseExpression() {
-    return ParseAssignment();
-}
-
-/**
- * ParseAssignment - Parse an assignment expression
- */
-std::shared_ptr<Expr> Parser::ParseAssignment() {
-    auto expr = ParseLogicalOr();
-    
-    if (Match(TokenKind::EQUAL)) {
-        auto value = ParseAssignment();  // Right-associative
-        
-        // Check if the left-hand side is a valid assignment target
-        if (std::dynamic_pointer_cast<VarExpr>(expr) ||
-            std::dynamic_pointer_cast<SubscriptExpr>(expr) ||
-            std::dynamic_pointer_cast<UnaryExpr>(expr)) {
-            return std::make_shared<AssignExpr>(expr, value);
-        }
-        
-        ReportError("Invalid assignment target");
-    }
-    
-    return expr;
-}
-
-/**
- * ParseLogicalOr - Parse a logical OR expression
- */
-std::shared_ptr<Expr> Parser::ParseLogicalOr() {
-    auto expr = ParseLogicalAnd();
-    
-    while (Match(TokenKind::PIPE_PIPE)) {
-        auto right = ParseLogicalAnd();
-        auto type = std::make_shared<BoolType>();  // Logical expressions always return bool
-        expr = std::make_shared<BinaryExpr>(BinaryExpr::Op::LOGICAL_OR, expr, right, type);
-    }
-    
-    return expr;
-}
-
-/**
- * ParseLogicalAnd - Parse a logical AND expression
- */
-std::shared_ptr<Expr> Parser::ParseLogicalAnd() {
-    auto expr = ParseBitwiseOr();
-    
-    while (Match(TokenKind::AMP_AMP)) {
-        auto right = ParseBitwiseOr();
-        auto type = std::make_shared<BoolType>();  // Logical expressions always return bool
-        expr = std::make_shared<BinaryExpr>(BinaryExpr::Op::LOGICAL_AND, expr, right, type);
-    }
-    
-    return expr;
-}
-
-/**
- * ParseBitwiseOr - Parse a bitwise OR expression
- */
-std::shared_ptr<Expr> Parser::ParseBitwiseOr() {
-    auto expr = ParseBitwiseXor();
-    
-    while (Match(Token
+    return ParseAss
