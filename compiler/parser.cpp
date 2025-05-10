@@ -230,9 +230,8 @@ std::shared_ptr<Type> Parser::ParseType() {
         Advance();
         
         // Try to find existing struct type
-        auto struct_it = struct_types_.find(name);
-        if (struct_it != struct_types_.end()) {
-            std::shared_ptr<StructType> type = struct_it->second;
+        if (struct_types_.find(name) != struct_types_.end()) {
+            std::shared_ptr<Type> type = struct_types_.find(name)->second;
             
             // Check for pointer type
             while (Match(TokenKind::STAR)) {
@@ -263,9 +262,8 @@ std::shared_ptr<Type> Parser::ParseType() {
         Advance();
         
         // Try to find existing enum type
-        auto enum_it = enum_types_.find(name);
-        if (enum_it != enum_types_.end()) {
-            std::shared_ptr<EnumType> type = enum_it->second;
+        if (enum_types_.find(name) != enum_types_.end()) {
+            std::shared_ptr<Type> type = enum_types_.find(name)->second;
             
             // Check for pointer type
             while (Match(TokenKind::STAR)) {
