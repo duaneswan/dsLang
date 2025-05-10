@@ -297,31 +297,24 @@ std::shared_ptr<Decl> Parser::ParseDeclaration() {
     }
     
     // Otherwise, must be a function or variable declaration
-    // First, parse the type
-    auto type = ParseType();
-    if (!type) {
-        ReportError("Expected type in declaration");
-        return nullptr;
-    }
-    
-    // Check for function or variable declaration
-    if (Check(TokenKind::IDENTIFIER)) {
-        std::string name = Peek().GetLexeme();
-        Advance();
+    // We'll test if it's a type token
+    if (Check(TokenKind::KW_VOID) || Check(TokenKind::KW_BOOL) ||
+        Check(TokenKind::KW_CHAR) || Check(TokenKind::KW_SHORT) ||
+        Check(TokenKind::KW_INT) || Check(TokenKind::KW_LONG) ||
+        Check(TokenKind::KW_FLOAT) || Check(TokenKind::KW_DOUBLE) ||
+        Check(TokenKind::KW_UNSIGNED) || Check(TokenKind::KW_STRUCT) ||
+        Check(TokenKind::KW_ENUM)) {
         
-        // Check if this is a function declaration
-        if (Check(TokenKind::LEFT_PAREN)) {
+        // Could be a function, method, or variable declaration
+        if (Check(TokenKind::LEFT_BRACKET)) {
+            return ParseMethodDeclaration();
+        } else {
+            // Try parsing as a function or variable
             return ParseFunctionDeclaration();
         }
-        
-        // Otherwise, it's a variable declaration
-        return ParseVariableDeclaration();
-    } else if (Check(TokenKind::LEFT_BRACKET)) {
-        // Could be a method declaration (Objective-C style)
-        return ParseMethodDeclaration();
     }
     
-    ReportError("Expected identifier or method name after type");
+    ReportError("Expected declaration");
     return nullptr;
 }
 
@@ -344,6 +337,12 @@ std::shared_ptr<FuncDecl> Parser::ParseFunctionDeclaration() {
     
     std::string name = Peek().GetLexeme();
     Advance();
+    
+    // Check for function vs variable declaration
+    if (!Check(TokenKind::LEFT_PAREN)) {
+        // This is a variable declaration
+        return std::dynamic_pointer_cast<FuncDecl>(ParseVariableDeclaration());
+    }
     
     // Consume the opening parenthesis
     Consume(TokenKind::LEFT_PAREN, "Expected '(' after function name");
@@ -875,20 +874,4 @@ std::shared_ptr<ContinueStmt> Parser::ParseContinueStatement() {
 //===----------------------------------------------------------------------===//
 
 /**
- * MakeBinaryExpr - Create a binary expression node
- */
-std::shared_ptr<BinaryExpr> Parser::MakeBinaryExpr(BinaryExpr::Op op, 
-                                                  std::shared_ptr<Expr> left, 
-                                                  std::shared_ptr<Expr> right) {
-    // Get the result type based on operand types and operator
-    std::shared_ptr<Type> result_type;
-    
-    // Check if both operands have types
-    if (left->GetType() && right->GetType()) {
-        // Logical operators
-        if (op == BinaryExpr::Op::LOGICAL_AND || op == BinaryExpr::Op::LOGICAL_OR) {
-            result_type = std::make_shared<BoolType>();
-        }
-        // Equality operators
-        else if (op == BinaryExpr::Op::EQUAL || op == BinaryExpr::Op::NOT_EQUAL) {
-            result_type = std::make_shared<BoolType>();
+ * MakeBinaryExpr -
