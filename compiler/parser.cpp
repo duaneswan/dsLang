@@ -1,877 +1,508 @@
 /**
- * parser.cpp - Parser Implementation for dsLang
+ * ParseReturnStatement - Parse a return statement
+ */
+std::shared_ptr<ReturnStmt> Parser::ParseReturnStatement() {
+    std::shared_ptr<Expr> value = nullptr;
+    
+    // Check if the return statement has a value
+    if (!Check(TokenKind::SEMICOLON)) {
+        value = ParseExpression();
+    }
+    
+    Consume(TokenKind::SEMICOLON, "Expected ';' after return value");
+    
+    return std::make_shared<ReturnStmt>(value);
+}
+
+/**
+ * ParseBreakStatement - Parse a break statement
+ */
+std::shared_ptr<BreakStmt> Parser::ParseBreakStatement() {
+    Consume(TokenKind::SEMICOLON, "Expected ';' after 'break'");
+    return std::make_shared<BreakStmt>();
+}
+
+/**
+ * ParseContinueStatement - Parse a continue statement
+ */
+std::shared_ptr<ContinueStmt> Parser::ParseContinueStatement() {
+    Consume(TokenKind::SEMICOLON, "Expected ';' after 'continue'");
+    return std::make_shared<ContinueStmt>();
+}
+
+//===----------------------------------------------------------------------===//
+// Expressions
+//===----------------------------------------------------------------------===//
+
+/**
+ * ParseExpression - Parse an expression
  * 
- * This file implements the Parser class which is responsible for parsing
- * source tokens into an Abstract Syntax Tree (AST).
+ * This is the top-level expression parsing function.
  */
-
-#include "parser.h"
-#include "diagnostic.h"
-#include <iostream>
-#include <sstream>
-
-namespace dsLang {
-
-// Factory function to create array types
-std::shared_ptr<ArrayType> CreateArrayType(std::shared_ptr<Type> element_type, std::shared_ptr<Expr> size_expr) {
-    return std::make_shared<ArrayType>(element_type, size_expr);
-}
-
-std::shared_ptr<ArrayType> CreateArrayType(std::shared_ptr<Type> element_type, size_t size) {
-    return std::make_shared<ArrayType>(element_type, size);
+std::shared_ptr<Expr> Parser::ParseExpression() {
+    return ParseAssignment();
 }
 
 /**
- * CreateType - Create a type from the specified token
+ * ParseAssignment - Parse an assignment expression
  */
-std::shared_ptr<Type> Parser::CreateType(const Token& type_token, bool is_unsigned) {
-    switch (type_token.GetKind()) {
-        case TokenKind::KW_VOID:
-            return std::make_shared<VoidType>();
-        case TokenKind::KW_BOOL:
-            return std::make_shared<BoolType>();
-        case TokenKind::KW_CHAR:
-            return std::make_shared<CharType>(is_unsigned);
-        case TokenKind::KW_SHORT:
-            return std::make_shared<ShortType>(is_unsigned);
-        case TokenKind::KW_INT:
-            return std::make_shared<IntType>(is_unsigned);
-        case TokenKind::KW_LONG:
-            return std::make_shared<LongType>(is_unsigned);
-        case TokenKind::KW_FLOAT:
-            return std::make_shared<FloatType>();
-        case TokenKind::KW_DOUBLE:
-            return std::make_shared<DoubleType>();
-        default:
-            ReportError("Unknown type token");
-            return nullptr;
-    }
-}
-
-/**
- * Constructor - Initialize parser with a lexer
- */
-Parser::Parser(Lexer& lexer, DiagnosticReporter& diag_reporter)
-    : lexer_(lexer), diag_reporter_(diag_reporter), has_errors_(false) {
-    // Prime the parser by fetching the first token
-    current_token_ = lexer_.GetNextToken();
-}
-
-/**
- * Parse - Parse the source code and build an AST
- */
-std::shared_ptr<CompilationUnit> Parser::Parse() {
-    return ParseCompilationUnit();
-}
-
-//===----------------------------------------------------------------------===//
-// Token Utilities
-//===----------------------------------------------------------------------===//
-
-/**
- * Consume - Consume the current token if it matches the expected kind
- */
-bool Parser::Consume(TokenKind kind, const std::string& error_msg) {
-    if (Check(kind)) {
-        Advance();
-        return true;
-    }
+std::shared_ptr<Expr> Parser::ParseAssignment() {
+    auto expr = ParseLogicalOr();
     
-    ReportError(error_msg);
-    return false;
-}
-
-/**
- * Match - Check if the current token matches the expected kind and consume it
- */
-bool Parser::Match(TokenKind kind) {
-    if (Check(kind)) {
-        Advance();
-        return true;
-    }
-    return false;
-}
-
-/**
- * Advance - Advance to the next token
- */
-Token Parser::Advance() {
-    Token previous = current_token_;
-    current_token_ = lexer_.GetNextToken();
-    return previous;
-}
-
-/**
- * Peek - Peek at the current token
- */
-Token Parser::Peek() const {
-    return current_token_;
-}
-
-/**
- * PeekNext - Peek at the next token
- */
-Token Parser::PeekNext() const {
-    return lexer_.PeekNextToken();
-}
-
-/**
- * Check - Check if the current token is of the expected kind
- */
-bool Parser::Check(TokenKind kind) const {
-    if (IsAtEnd()) return false;
-    return current_token_.GetKind() == kind;
-}
-
-/**
- * CheckNext - Check if the next token is of the expected kind
- */
-bool Parser::CheckNext(TokenKind kind) const {
-    Token next = lexer_.PeekNextToken();
-    return next.GetKind() == kind;
-}
-
-/**
- * IsAtEnd - Check if we've reached the end of the token stream
- */
-bool Parser::IsAtEnd() const {
-    return current_token_.GetKind() == TokenKind::END_OF_FILE;
-}
-
-/**
- * ReportError - Report an error at the current token
- */
-void Parser::ReportError(const std::string& message) {
-    has_errors_ = true;
-    diag_reporter_.ReportError(message, current_token_, lexer_.GetFilename());
-    
-    // Try to recover
-    Synchronize();
-}
-
-/**
- * Synchronize - Synchronize after an error
- */
-void Parser::Synchronize() {
-    Advance(); // Skip the token that caused the error
-    
-    while (!IsAtEnd()) {
-        // Stop at statement boundaries
-        if (Peek().GetKind() == TokenKind::SEMICOLON) {
-            Advance();
-            return;
+    if (Match(TokenKind::EQUAL)) {
+        auto value = ParseAssignment();
+        
+        // Check that the left-hand side is a valid assignment target
+        if (std::dynamic_pointer_cast<VarExpr>(expr) ||
+            std::dynamic_pointer_cast<SubscriptExpr>(expr) ||
+            std::dynamic_pointer_cast<MemberExpr>(expr)) {
+            return std::make_shared<AssignExpr>(expr, value);
         }
         
-        // Or at the start of the next declaration or statement
-        switch (Peek().GetKind()) {
-            case TokenKind::KW_IF:
-            case TokenKind::KW_WHILE:
-            case TokenKind::KW_FOR:
-            case TokenKind::KW_RETURN:
-            case TokenKind::KW_BREAK:
-            case TokenKind::KW_CONTINUE:
-            case TokenKind::KW_VOID:
-            case TokenKind::KW_BOOL:
-            case TokenKind::KW_CHAR:
-            case TokenKind::KW_SHORT:
-            case TokenKind::KW_INT:
-            case TokenKind::KW_LONG:
-            case TokenKind::KW_FLOAT:
-            case TokenKind::KW_DOUBLE:
-            case TokenKind::KW_STRUCT:
-            case TokenKind::KW_ENUM:
-                return;
+        ReportError("Invalid assignment target");
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseLogicalOr - Parse a logical OR expression
+ */
+std::shared_ptr<Expr> Parser::ParseLogicalOr() {
+    auto expr = ParseLogicalAnd();
+    
+    while (Match(TokenKind::LOGICAL_OR)) {
+        auto right = ParseLogicalAnd();
+        expr = MakeBinaryExpr(BinaryExpr::Op::LOGICAL_OR, expr, right);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseLogicalAnd - Parse a logical AND expression
+ */
+std::shared_ptr<Expr> Parser::ParseLogicalAnd() {
+    auto expr = ParseBitwiseOr();
+    
+    while (Match(TokenKind::LOGICAL_AND)) {
+        auto right = ParseBitwiseOr();
+        expr = MakeBinaryExpr(BinaryExpr::Op::LOGICAL_AND, expr, right);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseBitwiseOr - Parse a bitwise OR expression
+ */
+std::shared_ptr<Expr> Parser::ParseBitwiseOr() {
+    auto expr = ParseBitwiseXor();
+    
+    while (Match(TokenKind::PIPE)) {
+        auto right = ParseBitwiseXor();
+        expr = MakeBinaryExpr(BinaryExpr::Op::BIT_OR, expr, right);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseBitwiseXor - Parse a bitwise XOR expression
+ */
+std::shared_ptr<Expr> Parser::ParseBitwiseXor() {
+    auto expr = ParseBitwiseAnd();
+    
+    while (Match(TokenKind::CARET)) {
+        auto right = ParseBitwiseAnd();
+        expr = MakeBinaryExpr(BinaryExpr::Op::BIT_XOR, expr, right);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseBitwiseAnd - Parse a bitwise AND expression
+ */
+std::shared_ptr<Expr> Parser::ParseBitwiseAnd() {
+    auto expr = ParseEquality();
+    
+    while (Match(TokenKind::AMPERSAND)) {
+        auto right = ParseEquality();
+        expr = MakeBinaryExpr(BinaryExpr::Op::BIT_AND, expr, right);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseEquality - Parse an equality expression
+ */
+std::shared_ptr<Expr> Parser::ParseEquality() {
+    auto expr = ParseComparison();
+    
+    while (Match(TokenKind::EQUAL_EQUAL) || Match(TokenKind::BANG_EQUAL)) {
+        auto op = (Peek(-1).GetKind() == TokenKind::EQUAL_EQUAL) ? 
+                  BinaryExpr::Op::EQ : 
+                  BinaryExpr::Op::NE;
+        auto right = ParseComparison();
+        expr = MakeBinaryExpr(op, expr, right);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseComparison - Parse a comparison expression
+ */
+std::shared_ptr<Expr> Parser::ParseComparison() {
+    auto expr = ParseShift();
+    
+    while (Match(TokenKind::LESS) || Match(TokenKind::LESS_EQUAL) ||
+           Match(TokenKind::GREATER) || Match(TokenKind::GREATER_EQUAL)) {
+        BinaryExpr::Op op;
+        switch (Peek(-1).GetKind()) {
+            case TokenKind::LESS:
+                op = BinaryExpr::Op::LT;
+                break;
+            case TokenKind::LESS_EQUAL:
+                op = BinaryExpr::Op::LE;
+                break;
+            case TokenKind::GREATER:
+                op = BinaryExpr::Op::GT;
+                break;
+            case TokenKind::GREATER_EQUAL:
+                op = BinaryExpr::Op::GE;
+                break;
             default:
+                // Unreachable
+                op = BinaryExpr::Op::EQ;
+                break;
+        }
+        auto right = ParseShift();
+        expr = MakeBinaryExpr(op, expr, right);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseShift - Parse a shift expression
+ */
+std::shared_ptr<Expr> Parser::ParseShift() {
+    auto expr = ParseAdditive();
+    
+    while (Match(TokenKind::LESS_LESS) || Match(TokenKind::GREATER_GREATER)) {
+        auto op = (Peek(-1).GetKind() == TokenKind::LESS_LESS) ? 
+                  BinaryExpr::Op::SHL : 
+                  BinaryExpr::Op::SHR;
+        auto right = ParseAdditive();
+        expr = MakeBinaryExpr(op, expr, right);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseAdditive - Parse an additive expression
+ */
+std::shared_ptr<Expr> Parser::ParseAdditive() {
+    auto expr = ParseMultiplicative();
+    
+    while (Match(TokenKind::PLUS) || Match(TokenKind::MINUS)) {
+        auto op = (Peek(-1).GetKind() == TokenKind::PLUS) ? 
+                  BinaryExpr::Op::ADD : 
+                  BinaryExpr::Op::SUB;
+        auto right = ParseMultiplicative();
+        expr = MakeBinaryExpr(op, expr, right);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseMultiplicative - Parse a multiplicative expression
+ */
+std::shared_ptr<Expr> Parser::ParseMultiplicative() {
+    auto expr = ParseUnary();
+    
+    while (Match(TokenKind::STAR) || Match(TokenKind::SLASH) || Match(TokenKind::PERCENT)) {
+        BinaryExpr::Op op;
+        switch (Peek(-1).GetKind()) {
+            case TokenKind::STAR:
+                op = BinaryExpr::Op::MUL;
+                break;
+            case TokenKind::SLASH:
+                op = BinaryExpr::Op::DIV;
+                break;
+            case TokenKind::PERCENT:
+                op = BinaryExpr::Op::MOD;
+                break;
+            default:
+                // Unreachable
+                op = BinaryExpr::Op::ADD;
+                break;
+        }
+        auto right = ParseUnary();
+        expr = MakeBinaryExpr(op, expr, right);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseUnary - Parse a unary expression
+ */
+std::shared_ptr<Expr> Parser::ParseUnary() {
+    if (Match(TokenKind::BANG) || Match(TokenKind::MINUS) || 
+        Match(TokenKind::TILDE) || Match(TokenKind::STAR) || 
+        Match(TokenKind::AMPERSAND)) {
+        
+        UnaryExpr::Op op;
+        switch (Peek(-1).GetKind()) {
+            case TokenKind::BANG:
+                op = UnaryExpr::Op::NOT;
+                break;
+            case TokenKind::MINUS:
+                op = UnaryExpr::Op::NEG;
+                break;
+            case TokenKind::TILDE:
+                op = UnaryExpr::Op::BIT_NOT;
+                break;
+            case TokenKind::STAR:
+                op = UnaryExpr::Op::DEREF;
+                break;
+            case TokenKind::AMPERSAND:
+                op = UnaryExpr::Op::ADDR_OF;
+                break;
+            default:
+                // Unreachable
+                op = UnaryExpr::Op::NOT;
                 break;
         }
         
-        Advance();
-    }
-}
-
-//===----------------------------------------------------------------------===//
-// Type Parsing
-//===----------------------------------------------------------------------===//
-
-/**
- * ParseType - Parse a type
- */
-std::shared_ptr<Type> Parser::ParseType() {
-    bool is_unsigned = false;
-    
-    // Check for 'unsigned' modifier
-    if (Match(TokenKind::KW_UNSIGNED)) {
-        is_unsigned = true;
+        auto operand = ParseUnary();
+        return MakeUnaryExpr(op, operand);
     }
     
-    // Parse the base type
-    if (Check(TokenKind::KW_VOID) || Check(TokenKind::KW_BOOL) ||
-        Check(TokenKind::KW_CHAR) || Check(TokenKind::KW_SHORT) ||
-        Check(TokenKind::KW_INT) || Check(TokenKind::KW_LONG) ||
-        Check(TokenKind::KW_FLOAT) || Check(TokenKind::KW_DOUBLE)) {
-        Token type_token = Peek();
-        Advance();
-        auto type = CreateType(type_token, is_unsigned);
-        
-        // Check for pointer type
-        while (Match(TokenKind::STAR)) {
-            type = std::make_shared<PointerType>(type);
-        }
-        
-        return type;
-    } else if (Match(TokenKind::KW_STRUCT)) {
-        // Struct type
-        if (!Check(TokenKind::IDENTIFIER)) {
-            ReportError("Expected struct name");
-            return nullptr;
-        }
-        
-        std::string name = Peek().GetLexeme();
-        Advance();
-        
-        // Try to find existing struct type
-        if (struct_types_.find(name) != struct_types_.end()) {
-            std::shared_ptr<Type> type = struct_types_.find(name)->second;
-            
-            // Check for pointer type
-            while (Match(TokenKind::STAR)) {
-                type = std::make_shared<PointerType>(type);
-            }
-            
-            return type;
-        }
-        
-        // Create a new struct type
-        auto struct_type = std::make_shared<StructType>(name);
-        struct_types_.insert(std::make_pair(name, struct_type));
-        std::shared_ptr<Type> type = struct_type; // Explicit cast to base type
-        
-        // Check for pointer type
-        while (Match(TokenKind::STAR)) {
-            type = std::make_shared<PointerType>(type);
-        }
-        
-        return type;
-    } else if (Match(TokenKind::KW_ENUM)) {
-        // Enum type
-        if (!Check(TokenKind::IDENTIFIER)) {
-            ReportError("Expected enum name");
-            return nullptr;
-        }
-        
-        std::string name = Peek().GetLexeme();
-        Advance();
-        
-        // Try to find existing enum type
-        if (enum_types_.find(name) != enum_types_.end()) {
-            std::shared_ptr<Type> type = enum_types_.find(name)->second;
-            
-            // Check for pointer type
-            while (Match(TokenKind::STAR)) {
-                type = std::make_shared<PointerType>(type);
-            }
-            
-            return type;
-        }
-        
-        // Create a new enum type
-        auto enum_type = std::make_shared<EnumType>(name);
-        enum_types_.insert(std::make_pair(name, enum_type));
-        std::shared_ptr<Type> type = enum_type; // Explicit cast to base type
-        
-        // Check for pointer type
-        while (Match(TokenKind::STAR)) {
-            type = std::make_shared<PointerType>(type);
-        }
-        
-        return type;
-    }
-    
-    ReportError("Expected type");
-    return nullptr;
-}
-
-//===----------------------------------------------------------------------===//
-// Declarations
-//===----------------------------------------------------------------------===//
-
-/**
- * ParseCompilationUnit - Parse a compilation unit
- */
-std::shared_ptr<CompilationUnit> Parser::ParseCompilationUnit() {
-    std::vector<std::shared_ptr<Decl>> declarations;
-    
-    // Parse declarations until we reach the end of the file
-    while (!IsAtEnd()) {
-        auto decl = ParseDeclaration();
-        if (decl) {
-            declarations.push_back(decl);
-        }
-    }
-    
-    return std::make_shared<CompilationUnit>(declarations);
-}
-
-/**
- * ParseDeclaration - Parse a declaration
- */
-std::shared_ptr<Decl> Parser::ParseDeclaration() {
-    // Check for struct declaration
-    if (Match(TokenKind::KW_STRUCT)) {
-        return ParseStructDeclaration();
-    }
-    
-    // Check for enum declaration
-    if (Match(TokenKind::KW_ENUM)) {
-        return ParseEnumDeclaration();
-    }
-    
-    // Otherwise, must be a function or variable declaration
-    // We'll test if it's a type token
-    if (Check(TokenKind::KW_VOID) || Check(TokenKind::KW_BOOL) ||
-        Check(TokenKind::KW_CHAR) || Check(TokenKind::KW_SHORT) ||
-        Check(TokenKind::KW_INT) || Check(TokenKind::KW_LONG) ||
-        Check(TokenKind::KW_FLOAT) || Check(TokenKind::KW_DOUBLE) ||
-        Check(TokenKind::KW_UNSIGNED) || Check(TokenKind::KW_STRUCT) ||
-        Check(TokenKind::KW_ENUM)) {
-        
-        // Could be a function, method, or variable declaration
-        if (Check(TokenKind::LEFT_BRACKET)) {
-            return ParseMethodDeclaration();
-        } else {
-            // Try parsing as a function or variable
-            auto decl = ParseFunctionDeclaration();
-            if (!decl) {
-                return ParseVariableDeclaration();
-            }
-            return decl;
-        }
-    }
-    
-    ReportError("Expected declaration");
-    return nullptr;
-}
-
-/**
- * ParseFunctionDeclaration - Parse a function declaration
- */
-std::shared_ptr<FuncDecl> Parser::ParseFunctionDeclaration() {
-    // Get the return type
-    auto return_type = ParseType();
-    if (!return_type) {
-        ReportError("Expected return type for function");
-        return nullptr;
-    }
-    
-    // Get the function name
-    if (!Check(TokenKind::IDENTIFIER)) {
-        ReportError("Expected function name");
-        return nullptr;
-    }
-    
-    std::string name = Peek().GetLexeme();
-    Advance();
-    
-    // Check for function vs variable declaration
-    if (!Check(TokenKind::LEFT_PAREN)) {
-        // This is a variable declaration, not a function
-        // We need to return nullptr here, not try to parse it as a variable
-        return nullptr;
-    }
-    
-    // Consume the opening parenthesis
-    Consume(TokenKind::LEFT_PAREN, "Expected '(' after function name");
-    
-    // Parse parameters
-    std::vector<std::shared_ptr<ParamDecl>> parameters;
-    
-    if (!Check(TokenKind::RIGHT_PAREN)) {
-        do {
-            auto param = ParseParameterDeclaration();
-            if (param) {
-                parameters.push_back(param);
-            }
-        } while (Match(TokenKind::COMMA));
-    }
-    
-    // Consume the closing parenthesis
-    Consume(TokenKind::RIGHT_PAREN, "Expected ')' after function parameters");
-    
-    // Parse the function body
-    std::shared_ptr<BlockStmt> body = nullptr;
-    
-    if (Match(TokenKind::SEMICOLON)) {
-        // Function declaration (no body)
-        return std::make_shared<FuncDecl>(name, return_type, parameters, body);
-    }
-    
-    // Function definition (with body)
-    body = ParseBlockStatement();
-    
-    return std::make_shared<FuncDecl>(name, return_type, parameters, body);
-}
-
-/**
- * ParseMethodDeclaration - Parse a method declaration (Objective-C style)
- */
-std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration() {
-    // Get the return type
-    auto return_type = ParseType();
-    if (!return_type) {
-        ReportError("Expected return type for method");
-        return nullptr;
-    }
-    
-    // Consume the opening bracket
-    Consume(TokenKind::LEFT_BRACKET, "Expected '[' at start of method declaration");
-    
-    // Parse the receiver
-    if (!Check(TokenKind::IDENTIFIER)) {
-        ReportError("Expected identifier for method receiver");
-        return nullptr;
-    }
-    
-    std::string receiver = Peek().GetLexeme();
-    Advance();
-    
-    // For simplicity, assume all receivers are of type 'struct receiver'
-    auto receiver_type = std::make_shared<StructType>(receiver);
-    
-    // Parse the method selector and parameters
-    if (!Check(TokenKind::IDENTIFIER)) {
-        ReportError("Expected method name after receiver");
-        return nullptr;
-    }
-    
-    std::string selector = Peek().GetLexeme();
-    Advance();
-    
-    std::vector<std::shared_ptr<ParamDecl>> parameters;
-    
-    // Check if we have parameters
-    if (Match(TokenKind::COLON)) {
-        // This is a method with at least one parameter
-        do {
-            auto param = ParseParameterDeclaration();
-            if (param) {
-                parameters.push_back(param);
-                
-                // If we have another parameter, it should be preceded by an identifier and colon
-                if (Check(TokenKind::IDENTIFIER) && CheckNext(TokenKind::COLON)) {
-                    std::string param_name = Peek().GetLexeme();
-                    selector += "_" + param_name;
-                    Advance(); // Consume identifier
-                    Consume(TokenKind::COLON, "Expected ':' after parameter name");
-                }
-            }
-        } while (Check(TokenKind::IDENTIFIER) && CheckNext(TokenKind::COLON));
-    }
-    
-    // Consume the closing bracket
-    Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after method declaration");
-    
-    // Parse the method body
-    std::shared_ptr<BlockStmt> body = nullptr;
-    
-    if (Match(TokenKind::SEMICOLON)) {
-        // Method declaration (no body)
-        return std::make_shared<MethodDecl>(selector, return_type, receiver_type, parameters, body);
-    }
-    
-    // Method definition (with body)
-    body = ParseBlockStatement();
-    
-    return std::make_shared<MethodDecl>(selector, return_type, receiver_type, parameters, body);
-}
-
-/**
- * ParseVariableDeclaration - Parse a variable declaration
- */
-std::shared_ptr<VarDecl> Parser::ParseVariableDeclaration() {
-    // Get the variable type
-    auto type = ParseType();
-    if (!type) {
-        ReportError("Expected type for variable declaration");
-        return nullptr;
-    }
-    
-    // Get the variable name
-    if (!Check(TokenKind::IDENTIFIER)) {
-        ReportError("Expected variable name");
-        return nullptr;
-    }
-    
-    std::string name = Peek().GetLexeme();
-    Advance();
-    
-    // Check for array declaration
-    if (Match(TokenKind::LEFT_BRACKET)) {
-        // Array type
-        std::shared_ptr<Expr> size_expr = nullptr;
-        
-        if (!Check(TokenKind::RIGHT_BRACKET)) {
-            size_expr = ParseExpression();
-        }
-        
-        Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after array size");
-        
-        // Create a size_t literal for constant sizes if possible
-        size_t array_size = 0;
-        bool has_constant_size = false;
-        
-        if (size_expr && size_expr->GetType()->IsIntegral()) {
-            auto literal = std::dynamic_pointer_cast<LiteralExpr>(size_expr);
-            if (literal && literal->GetLiteralKind() == LiteralExpr::Kind::INT) {
-                array_size = static_cast<size_t>(literal->GetIntValue());
-                has_constant_size = true;
-            }
-        }
-        
-        // Create array type using the helper function
-        if (has_constant_size) {
-            type = CreateArrayType(type, array_size);
-        } else if (size_expr) {
-            type = CreateArrayType(type, size_expr);
-        }
-    }
-    
-    // Check for initializer
-    std::shared_ptr<Expr> initializer = nullptr;
-    
-    if (Match(TokenKind::EQUAL)) {
-        initializer = ParseExpression();
-    }
-    
-    // Consume semicolon
-    Consume(TokenKind::SEMICOLON, "Expected ';' after variable declaration");
-    
-    return std::make_shared<VarDecl>(name, type, initializer);
-}
-
-/**
- * ParseParameterDeclaration - Parse a parameter declaration
- */
-std::shared_ptr<ParamDecl> Parser::ParseParameterDeclaration() {
-    auto type = ParseType();
-    if (!type) {
-        ReportError("Expected parameter type");
-        return nullptr;
-    }
-    
-    if (!Check(TokenKind::IDENTIFIER)) {
-        ReportError("Expected parameter name");
-        return nullptr;
-    }
-    
-    std::string name = Peek().GetLexeme();
-    Advance();
-    
-    // Check for array notation
-    if (Match(TokenKind::LEFT_BRACKET)) {
-        Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after array parameter");
-        
-        // Create array type using the helper function with zero size for parameters
-        type = CreateArrayType(type, (size_t)0);
-    }
-    
-    return std::make_shared<ParamDecl>(name, type);
-}
-
-/**
- * ParseStructDeclaration - Parse a struct declaration
- */
-std::shared_ptr<StructDecl> Parser::ParseStructDeclaration() {
-    // Parse struct name
-    if (!Check(TokenKind::IDENTIFIER)) {
-        ReportError("Expected struct name");
-        return nullptr;
-    }
-    
-    std::string name = Peek().GetLexeme();
-    Advance();
-    
-    // Check for forward declaration
-    if (Match(TokenKind::SEMICOLON)) {
-        // Forward declaration
-        return std::make_shared<StructDecl>(name, std::vector<std::shared_ptr<VarDecl>>());
-    }
-    
-    // Parse struct body
-    Consume(TokenKind::LEFT_BRACE, "Expected '{' after struct name");
-    
-    std::vector<std::shared_ptr<VarDecl>> fields;
-    
-    while (!Check(TokenKind::RIGHT_BRACE) && !IsAtEnd()) {
-        auto type = ParseType();
-        if (!type) {
-            ReportError("Expected type for struct field");
-            return nullptr;
-        }
-        
-        if (!Check(TokenKind::IDENTIFIER)) {
-            ReportError("Expected field name");
-            return nullptr;
-        }
-        
-        std::string field_name = Peek().GetLexeme();
-        Advance();
-        
-        // Check for array field
-        if (Match(TokenKind::LEFT_BRACKET)) {
-            std::shared_ptr<Expr> size_expr = nullptr;
-            
-            if (!Check(TokenKind::RIGHT_BRACKET)) {
-                size_expr = ParseExpression();
-            }
-            
-            Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after array size");
-            
-            // Create array type using the helper function
-            if (size_expr) {
-                type = CreateArrayType(type, size_expr);
-            } else {
-                // For variable length arrays in struct fields, use size 0
-                type = CreateArrayType(type, (size_t)0);
-            }
-        }
-        
-        Consume(TokenKind::SEMICOLON, "Expected ';' after struct field declaration");
-        
-        fields.push_back(std::make_shared<VarDecl>(field_name, type, nullptr));
-    }
-    
-    Consume(TokenKind::RIGHT_BRACE, "Expected '}' after struct body");
-    Consume(TokenKind::SEMICOLON, "Expected ';' after struct declaration");
-    
-    return std::make_shared<StructDecl>(name, fields);
-}
-
-/**
- * ParseEnumDeclaration - Parse an enum declaration
- */
-std::shared_ptr<EnumDecl> Parser::ParseEnumDeclaration() {
-    // Parse enum name
-    if (!Check(TokenKind::IDENTIFIER)) {
-        ReportError("Expected enum name");
-        return nullptr;
-    }
-    
-    std::string name = Peek().GetLexeme();
-    Advance();
-    
-    // Parse enum body
-    Consume(TokenKind::LEFT_BRACE, "Expected '{' after enum name");
-    
-    // Use int64_t for enum values as required by EnumDecl constructor
-    std::vector<std::pair<std::string, int64_t>> enumerators;
-    int64_t next_value = 0;
-    
-    if (!Check(TokenKind::RIGHT_BRACE)) {
-        do {
-            if (!Check(TokenKind::IDENTIFIER)) {
-                ReportError("Expected enumerator name");
-                return nullptr;
-            }
-            
-            std::string enum_name = Peek().GetLexeme();
-            Advance();
-            
-            int64_t value = next_value++;
-            
-            if (Match(TokenKind::EQUAL)) {
-                // For simplicity, we only handle integer literals in enum values
-                // A more complete implementation would evaluate expressions
-                if (Check(TokenKind::INT_LITERAL)) {
-                    value = std::stoll(Peek().GetLexeme());
-                    Advance();
-                    next_value = value + 1;
-                } else {
-                    ReportError("Expected integer literal for enum value");
-                }
-            }
-            
-            enumerators.push_back(std::make_pair(enum_name, value));
-        } while (Match(TokenKind::COMMA) && !Check(TokenKind::RIGHT_BRACE));
-    }
-    
-    Consume(TokenKind::RIGHT_BRACE, "Expected '}' after enum body");
-    Consume(TokenKind::SEMICOLON, "Expected ';' after enum declaration");
-    
-    // Assume a base type of int for all enums for now
-    auto base_type = std::make_shared<IntType>(false);
-    return std::make_shared<EnumDecl>(name, base_type, enumerators);
-}
-
-//===----------------------------------------------------------------------===//
-// Statements
-//===----------------------------------------------------------------------===//
-
-/**
- * ParseStatement - Parse a statement
- */
-std::shared_ptr<Stmt> Parser::ParseStatement() {
-    if (Match(TokenKind::LEFT_BRACE)) {
-        return ParseBlockStatement();
-    }
-    
-    if (Match(TokenKind::KW_IF)) {
-        return ParseIfStatement();
-    }
-    
-    if (Match(TokenKind::KW_WHILE)) {
-        return ParseWhileStatement();
-    }
-    
-    if (Match(TokenKind::KW_FOR)) {
-        return ParseForStatement();
-    }
-    
-    if (Match(TokenKind::KW_RETURN)) {
-        return ParseReturnStatement();
-    }
-    
-    if (Match(TokenKind::KW_BREAK)) {
-        return ParseBreakStatement();
-    }
-    
-    if (Match(TokenKind::KW_CONTINUE)) {
-        return ParseContinueStatement();
-    }
-    
-    // Check for declarations
-    if (Check(TokenKind::KW_VOID) || Check(TokenKind::KW_BOOL) ||
-        Check(TokenKind::KW_CHAR) || Check(TokenKind::KW_SHORT) ||
-        Check(TokenKind::KW_INT) || Check(TokenKind::KW_LONG) ||
-        Check(TokenKind::KW_FLOAT) || Check(TokenKind::KW_DOUBLE) ||
-        Check(TokenKind::KW_UNSIGNED) || Check(TokenKind::KW_STRUCT) ||
-        Check(TokenKind::KW_ENUM)) {
-        return ParseDeclarationStatement();
-    }
-    
-    // Otherwise, this is an expression statement
-    return ParseExpressionStatement();
-}
-
-/**
- * ParseBlockStatement - Parse a block statement
- */
-std::shared_ptr<BlockStmt> Parser::ParseBlockStatement() {
-    std::vector<std::shared_ptr<Stmt>> statements;
-    
-    // Parse statements until we reach the end of the block
-    while (!Check(TokenKind::RIGHT_BRACE) && !IsAtEnd()) {
-        auto stmt = ParseStatement();
-        if (stmt) {
-            statements.push_back(stmt);
-        }
-    }
-    
-    Consume(TokenKind::RIGHT_BRACE, "Expected '}' after block");
-    
-    return std::make_shared<BlockStmt>(statements);
-}
-
-/**
- * ParseExpressionStatement - Parse an expression statement
- */
-std::shared_ptr<ExprStmt> Parser::ParseExpressionStatement() {
-    auto expr = ParseExpression();
-    
-    Consume(TokenKind::SEMICOLON, "Expected ';' after expression");
-    
-    return std::make_shared<ExprStmt>(expr);
-}
-
-/**
- * ParseDeclarationStatement - Parse a declaration statement
- */
-std::shared_ptr<DeclStmt> Parser::ParseDeclarationStatement() {
-    // Parse a variable declaration
-    auto decl = ParseVariableDeclaration();
-    if (!decl) {
-        ReportError("Expected variable declaration");
-        return nullptr;
-    }
-    
-    return std::make_shared<DeclStmt>(decl);
-}
-
-/**
- * ParseIfStatement - Parse an if statement
- */
-std::shared_ptr<IfStmt> Parser::ParseIfStatement() {
-    Consume(TokenKind::LEFT_PAREN, "Expected '(' after 'if'");
-    auto condition = ParseExpression();
-    Consume(TokenKind::RIGHT_PAREN, "Expected ')' after if condition");
-    
-    auto then_stmt = ParseStatement();
-    std::shared_ptr<Stmt> else_stmt = nullptr;
-    
-    if (Match(TokenKind::KW_ELSE)) {
-        else_stmt = ParseStatement();
-    }
-    
-    return std::make_shared<IfStmt>(condition, then_stmt, else_stmt);
-}
-
-/**
- * ParseWhileStatement - Parse a while statement
- */
-std::shared_ptr<WhileStmt> Parser::ParseWhileStatement() {
-    Consume(TokenKind::LEFT_PAREN, "Expected '(' after 'while'");
-    auto condition = ParseExpression();
-    Consume(TokenKind::RIGHT_PAREN, "Expected ')' after while condition");
-    
-    auto body = ParseStatement();
-    
-    return std::make_shared<WhileStmt>(condition, body);
-}
-
-/**
- * ParseForStatement - Parse a for statement
- */
-std::shared_ptr<ForStmt> Parser::ParseForStatement() {
-    Consume(TokenKind::LEFT_PAREN, "Expected '(' after 'for'");
-    
-    // Parse initialization
-    std::shared_ptr<Stmt> init = nullptr;
-    if (!Check(TokenKind::SEMICOLON)) {
+    // Handle cast expression
+    if (Match(TokenKind::LEFT_PAREN)) {
+        // Check if this is a cast expression
         if (Check(TokenKind::KW_VOID) || Check(TokenKind::KW_BOOL) ||
             Check(TokenKind::KW_CHAR) || Check(TokenKind::KW_SHORT) ||
             Check(TokenKind::KW_INT) || Check(TokenKind::KW_LONG) ||
             Check(TokenKind::KW_FLOAT) || Check(TokenKind::KW_DOUBLE) ||
             Check(TokenKind::KW_UNSIGNED) || Check(TokenKind::KW_STRUCT) ||
             Check(TokenKind::KW_ENUM)) {
-            init = ParseDeclarationStatement();
-        } else {
-            init = ParseExpressionStatement();
+            
+            // This is a cast expression
+            Advance(); // Go back to the '('
+            return ParseCastExpression();
         }
-    } else {
-        Consume(TokenKind::SEMICOLON, "Expected ';' after for initialization");
+        
+        // This is a grouped expression
+        auto expr = ParseExpression();
+        Consume(TokenKind::RIGHT_PAREN, "Expected ')' after expression");
+        return expr;
     }
     
-    // Parse condition
-    std::shared_ptr<Expr> condition = nullptr;
-    if (!Check(TokenKind::SEMICOLON)) {
-        condition = ParseExpression();
-    }
-    Consume(TokenKind::SEMICOLON, "Expected ';' after for condition");
-    
-    // Parse increment
-    std::shared_ptr<Expr> increment = nullptr;
-    if (!Check(TokenKind::RIGHT_PAREN)) {
-        increment = ParseExpression();
-    }
-    Consume(TokenKind::RIGHT_PAREN, "Expected ')' after for clauses");
-    
-    // Parse body
-    auto body = ParseStatement();
-    
-    return std::make_shared<ForStmt>(init, condition, increment, body);
+    return ParsePostfix();
 }
 
 /**
- * ParseReturnStatement - Parse a return statement
+ * ParsePostfix - Parse a postfix expression
  */
-std::shared_ptr<ReturnStmt> Parser::ParseReturnStatement() {
-    std::shared_ptr<Expr> value = nullptr;
+std::shared_ptr<Expr> Parser::ParsePostfix() {
+    auto expr = ParsePrimary();
+    
+    while (true) {
+        if (Match(TokenKind::LEFT_PAREN)) {
+            // Function call
+            expr = ParseFunctionCall(expr);
+        } else if (Match(TokenKind::LEFT_BRACKET)) {
+            // Array subscript
+            expr = ParseSubscript(expr);
+        } else if (Match(TokenKind::DOT)) {
+            // Member access
+            if (!Check(TokenKind::IDENTIFIER)) {
+                ReportError("Expected identifier after '.'");
+                return nullptr;
+            }
+            
+            std::string member = Peek().GetLexeme();
+            Advance();
+            
+            expr = std::make_shared<MemberExpr>(expr, member);
+        } else if (Match(TokenKind::ARROW)) {
+            // Member access through pointer
+            if (!Check(TokenKind::IDENTIFIER)) {
+                ReportError("Expected identifier after '->'");
+                return nullptr;
+            }
+            
+            std::string member = Peek().GetLexeme();
+            Advance();
+            
+            // Create a temporary deref expression
+            auto deref = MakeUnaryExpr(UnaryExpr::Op::DEREF, expr);
+            expr = std::make_shared<MemberExpr>(deref, member);
+        } else {
+            break;
+        }
+    }
+    
+    return expr;
+}
+
+/**
+ * ParsePrimary - Parse a primary expression
+ */
+std::shared_ptr<Expr> Parser::ParsePrimary() {
+    if (Match(TokenKind::LEFT_BRACKET)) {
+        return ParseMessageExpression();
+    }
+    
+    if (Match(TokenKind::IDENTIFIER)) {
+        std::string name = Peek(-1).GetLexeme();
+        return std::make_shared<VarExpr>(name);
+    }
+    
+    if (Match(TokenKind::INT_LITERAL)) {
+        int64_t value = std::stoll(Peek(-1).GetLexeme());
+        return std::make_shared<LiteralExpr>(value);
+    }
+    
+    if (Match(TokenKind::FLOAT_LITERAL)) {
+        double value = std::stod(Peek(-1).GetLexeme());
+        return std::make_shared<LiteralExpr>(value);
+    }
+    
+    if (Match(TokenKind::CHAR_LITERAL)) {
+        char value = Peek(-1).GetLexeme()[0];
+        return std::make_shared<LiteralExpr>(value);
+    }
+    
+    if (Match(TokenKind::STRING_LITERAL)) {
+        std::string value = Peek(-1).GetLexeme();
+        return std::make_shared<LiteralExpr>(value);
+    }
+    
+    if (Match(TokenKind::KW_TRUE)) {
+        return std::make_shared<LiteralExpr>(true);
+    }
+    
+    if (Match(TokenKind::KW_FALSE)) {
+        return std::make_shared<LiteralExpr>(false);
+    }
+    
+    if (Match(TokenKind::KW_NULL)) {
+        return std::make_shared<LiteralExpr>();
+    }
+    
+    ReportError("Expected expression");
+    return nullptr;
+}
+
+/**
+ * ParseMessageExpression - Parse a message expression (Objective-C style)
+ */
+std::shared_ptr<Expr> Parser::ParseMessageExpression() {
+    // Parse the receiver
+    auto receiver = ParseExpression();
+    
+    // Parse the selector and arguments
+    if (!Check(TokenKind::IDENTIFIER)) {
+        ReportError("Expected selector name in message expression");
+        return nullptr;
+    }
+    
+    std::string selector = Peek().GetLexeme();
+    Advance();
+    
+    std::vector<std::shared_ptr<Expr>> arguments;
+    
+    // Check if we have arguments
+    if (Match(TokenKind::COLON)) {
+        // This is a method with at least one argument
+        do {
+            auto arg = ParseExpression();
+            arguments.push_back(arg);
+            
+            // If we have another argument, it should be preceded by an identifier and colon
+            if (Check(TokenKind::IDENTIFIER) && CheckNext(TokenKind::COLON)) {
+                std::string part_name = Peek().GetLexeme();
+                selector += "_" + part_name;
+                Advance(); // Consume identifier
+                Consume(TokenKind::COLON, "Expected ':' after selector part");
+            }
+        } while (Check(TokenKind::IDENTIFIER) && CheckNext(TokenKind::COLON));
+    }
+    
+    // Consume the closing bracket
+    Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after message expression");
+    
+    return std::make_shared<MessageExpr>(receiver, selector, arguments);
+}
+
+/**
+ * ParseFunctionCall - Parse a function call
+ */
+std::shared_ptr<Expr> Parser::ParseFunctionCall(std::shared_ptr<Expr> callee) {
+    std::vector<std::shared_ptr<Expr>> arguments;
+    
+    if (!Check(TokenKind::RIGHT_PAREN)) {
+        do {
+            auto arg = ParseExpression();
+            arguments.push_back(arg);
+        } while (Match(TokenKind::COMMA));
+    }
+    
+    Consume(TokenKind::RIGHT_PAREN, "Expected ')' after function arguments");
+    
+    return std::make_shared<CallExpr>(callee, arguments);
+}
+
+/**
+ * ParseSubscript - Parse an array subscript
+ */
+std::shared_ptr<Expr> Parser::ParseSubscript(std::shared_ptr<Expr> array) {
+    auto index = ParseExpression();
+    
+    Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after array index");
+    
+    return std::make_shared<SubscriptExpr>(array, index);
+}
+
+/**
+ * ParseCastExpression - Parse a cast expression
+ */
+std::shared_ptr<Expr> Parser::ParseCastExpression() {
+    Consume(TokenKind::LEFT_PAREN, "Expected '(' at start of cast expression");
+    
+    auto type = ParseType();
+    
+    Consume(TokenKind::RIGHT_PAREN, "Expected ')' after cast type");
+    
+    auto expr = ParseUnary();
+    
+    return std::make_shared<CastExpr>(type, expr);
+}
+
+/**
+ * MakeBinaryExpr - Create a binary expression node
+ */
+std::shared_ptr<BinaryExpr> Parser::MakeBinaryExpr(BinaryExpr::Op op, 
+                                                 std::shared_ptr<Expr> left, 
+                                                 std::shared_ptr<Expr> right) {
+    return std::make_shared<BinaryExpr>(op, left, right);
+}
+
+/**
+ * MakeUnaryExpr - Create a unary expression node
+ */
+std::shared_ptr<UnaryExpr> Parser::MakeUnaryExpr(UnaryExpr::Op op, 
+                                               std::shared_ptr<Expr> operand) {
+    return std::make_shared<UnaryExpr>(op, operand);
+}
+
+} // namespace dsLang
