@@ -853,4 +853,29 @@ std::shared_ptr<Expr> Parser::ParseLogicalOr() {
     
     while (Match(TokenKind::PIPE_PIPE)) {
         auto right = ParseLogicalAnd();
-        auto type = std::make_shared<BoolType>();
+        auto type = std::make_shared<BoolType>();  // Logical expressions always return bool
+        expr = std::make_shared<BinaryExpr>(BinaryExpr::Op::LOGICAL_OR, expr, right, type);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseLogicalAnd - Parse a logical AND expression
+ */
+std::shared_ptr<Expr> Parser::ParseLogicalAnd() {
+    auto expr = ParseBitwiseOr();
+    
+    while (Match(TokenKind::AMP_AMP)) {
+        auto right = ParseBitwiseOr();
+        auto type = std::make_shared<BoolType>();  // Logical expressions always return bool
+        expr = std::make_shared<BinaryExpr>(BinaryExpr::Op::LOGICAL_AND, expr, right, type);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseBitwiseOr - Parse a bitwise OR expression
+ */
+std::shared_ptr
