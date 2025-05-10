@@ -243,7 +243,7 @@ std::shared_ptr<Type> Parser::ParseType() {
         
         // Create a new struct type
         auto type = std::make_shared<StructType>(name);
-        struct_types_[name] = type;
+        struct_types_.insert(std::make_pair(name, type));
         
         // Check for pointer type
         while (Match(TokenKind::STAR)) {
@@ -275,7 +275,7 @@ std::shared_ptr<Type> Parser::ParseType() {
         
         // Create a new enum type
         auto type = std::make_shared<EnumType>(name);
-        enum_types_[name] = type;
+        enum_types_.insert(std::make_pair(name, type));
         
         // Check for pointer type
         while (Match(TokenKind::STAR)) {
