@@ -229,7 +229,20 @@ std::shared_ptr<Type> Parser::ParseType() {
         std::string name = Peek().GetLexeme();
         Advance();
         
+        auto it = struct_types_.find(name);
+        if (it != struct_types_.end()) {
+            auto type = it->second;
+            
+            // Check for pointer type
+            while (Match(TokenKind::STAR)) {
+                type = std::make_shared<PointerType>(type);
+            }
+            
+            return type;
+        }
+        
         auto type = std::make_shared<StructType>(name);
+        struct_types_[name] = type;
         
         // Check for pointer type
         while (Match(TokenKind::STAR)) {
@@ -247,7 +260,20 @@ std::shared_ptr<Type> Parser::ParseType() {
         std::string name = Peek().GetLexeme();
         Advance();
         
+        auto it = enum_types_.find(name);
+        if (it != enum_types_.end()) {
+            auto type = it->second;
+            
+            // Check for pointer type
+            while (Match(TokenKind::STAR)) {
+                type = std::make_shared<PointerType>(type);
+            }
+            
+            return type;
+        }
+        
         auto type = std::make_shared<EnumType>(name);
+        enum_types_[name] = type;
         
         // Check for pointer type
         while (Match(TokenKind::STAR)) {
@@ -848,18 +874,4 @@ std::shared_ptr<ReturnStmt> Parser::ParseReturnStatement() {
     
     // Check if the return statement has a value
     if (!Check(TokenKind::SEMICOLON)) {
-        value = ParseExpression();
-    }
-    
-    Consume(TokenKind::SEMICOLON, "Expected ';' after return value");
-    
-    return std::make_shared<ReturnStmt>(value);
-}
-
-/**
- * ParseBreakStatement - Parse a break statement
- */
-std::shared_ptr<BreakStmt> Parser::ParseBreakStatement() {
-    Consume(TokenKind::SEMICOLON, "Expected ';' after 'break'");
-    
-    return std::make_shared<BreakSt
+        value =
