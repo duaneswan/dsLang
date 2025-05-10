@@ -311,14 +311,14 @@ std::shared_ptr<Decl> Parser::ParseDeclaration() {
         
         // Check if this is a function declaration
         if (Check(TokenKind::LEFT_PAREN)) {
-            return ParseFunctionDeclaration(type, name);
+            return ParseFunctionDeclaration();
         }
         
         // Otherwise, it's a variable declaration
-        return ParseVariableDeclaration(type, name);
+        return ParseVariableDeclaration();
     } else if (Check(TokenKind::LEFT_BRACKET)) {
         // Could be a method declaration (Objective-C style)
-        return ParseMethodDeclaration(type);
+        return ParseMethodDeclaration();
     }
     
     ReportError("Expected identifier or method name after type");
@@ -328,7 +328,23 @@ std::shared_ptr<Decl> Parser::ParseDeclaration() {
 /**
  * ParseFunctionDeclaration - Parse a function declaration
  */
-std::shared_ptr<FuncDecl> Parser::ParseFunctionDeclaration(std::shared_ptr<Type> return_type, const std::string& name) {
+std::shared_ptr<FuncDecl> Parser::ParseFunctionDeclaration() {
+    // Get the return type
+    auto return_type = ParseType();
+    if (!return_type) {
+        ReportError("Expected return type for function");
+        return nullptr;
+    }
+    
+    // Get the function name
+    if (!Check(TokenKind::IDENTIFIER)) {
+        ReportError("Expected function name");
+        return nullptr;
+    }
+    
+    std::string name = Peek().GetLexeme();
+    Advance();
+    
     // Consume the opening parenthesis
     Consume(TokenKind::LEFT_PAREN, "Expected '(' after function name");
     
@@ -364,7 +380,14 @@ std::shared_ptr<FuncDecl> Parser::ParseFunctionDeclaration(std::shared_ptr<Type>
 /**
  * ParseMethodDeclaration - Parse a method declaration (Objective-C style)
  */
-std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration(std::shared_ptr<Type> return_type) {
+std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration() {
+    // Get the return type
+    auto return_type = ParseType();
+    if (!return_type) {
+        ReportError("Expected return type for method");
+        return nullptr;
+    }
+    
     // Consume the opening bracket
     Consume(TokenKind::LEFT_BRACKET, "Expected '[' at start of method declaration");
     
@@ -430,7 +453,23 @@ std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration(std::shared_ptr<Type>
 /**
  * ParseVariableDeclaration - Parse a variable declaration
  */
-std::shared_ptr<VarDecl> Parser::ParseVariableDeclaration(std::shared_ptr<Type> type, const std::string& name) {
+std::shared_ptr<VarDecl> Parser::ParseVariableDeclaration() {
+    // Get the variable type
+    auto type = ParseType();
+    if (!type) {
+        ReportError("Expected type for variable declaration");
+        return nullptr;
+    }
+    
+    // Get the variable name
+    if (!Check(TokenKind::IDENTIFIER)) {
+        ReportError("Expected variable name");
+        return nullptr;
+    }
+    
+    std::string name = Peek().GetLexeme();
+    Advance();
+    
     // Check for array declaration
     if (Match(TokenKind::LEFT_BRACKET)) {
         // Array type
@@ -625,7 +664,7 @@ std::shared_ptr<EnumDecl> Parser::ParseEnumDeclaration() {
     Consume(TokenKind::SEMICOLON, "Expected ';' after enum declaration");
     
     // Assume a base type of int for all enums for now
-    auto base_type = std::make_shared<IntType>();
+    auto base_type = std::make_shared<IntType>(false);
     return std::make_shared<EnumDecl>(name, base_type, enumerators);
 }
 
@@ -713,24 +752,8 @@ std::shared_ptr<ExprStmt> Parser::ParseExpressionStatement() {
  * ParseDeclarationStatement - Parse a declaration statement
  */
 std::shared_ptr<DeclStmt> Parser::ParseDeclarationStatement() {
-    // Get the variable type
-    auto type = ParseType();
-    if (!type) {
-        ReportError("Expected type for variable declaration");
-        return nullptr;
-    }
-    
-    // Get the variable name
-    if (!Check(TokenKind::IDENTIFIER)) {
-        ReportError("Expected variable name");
-        return nullptr;
-    }
-    
-    std::string name = Peek().GetLexeme();
-    Advance();
-    
-    // Parse the rest of the variable declaration
-    auto decl = ParseVariableDeclaration(type, name);
+    // Parse a variable declaration
+    auto decl = ParseVariableDeclaration();
     if (!decl) {
         ReportError("Expected variable declaration");
         return nullptr;
@@ -848,27 +871,24 @@ std::shared_ptr<ContinueStmt> Parser::ParseContinueStatement() {
 }
 
 //===----------------------------------------------------------------------===//
-// Expressions
+// Helper Methods
 //===----------------------------------------------------------------------===//
 
 /**
- * ParseExpression - Parse an expression
- * 
- * This is the entry point for parsing expressions.
- * Expression grammar (in decreasing precedence):
- * - Primary: literals, variables, parenthesized expressions
- * - Unary: !, ~, -, ++, --, *, &
- * - Multiplicative: *, /, %
- * - Additive: +, -
- * - Shift: <<, >>
- * - Relational: <, >, <=, >=
- * - Equality: ==, !=
- * - BitwiseAND: &
- * - BitwiseXOR: ^
- * - BitwiseOR: |
- * - LogicalAND: &&
- * - LogicalOR: ||
- * - Assignment: =
+ * MakeBinaryExpr - Create a binary expression node
  */
-std::shared_ptr<Expr> Parser::ParseExpression() {
-    return ParseAss
+std::shared_ptr<BinaryExpr> Parser::MakeBinaryExpr(BinaryExpr::Op op, 
+                                                  std::shared_ptr<Expr> left, 
+                                                  std::shared_ptr<Expr> right) {
+    // Get the result type based on operand types and operator
+    std::shared_ptr<Type> result_type;
+    
+    // Check if both operands have types
+    if (left->GetType() && right->GetType()) {
+        // Logical operators
+        if (op == BinaryExpr::Op::LOGICAL_AND || op == BinaryExpr::Op::LOGICAL_OR) {
+            result_type = std::make_shared<BoolType>();
+        }
+        // Equality operators
+        else if (op == BinaryExpr::Op::EQUAL || op == BinaryExpr::Op::NOT_EQUAL) {
+            result_type = std::make_shared<BoolType>();
