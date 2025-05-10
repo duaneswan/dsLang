@@ -864,18 +864,3 @@ std::shared_ptr<ContinueStmt> Parser::ParseContinueStatement() {
 std::shared_ptr<Expr> Parser::ParseExpression() {
     return ParseAssignment();
 }
-
-/**
- * ParseAssignment - Parse an assignment expression
- */
-std::shared_ptr<Expr> Parser::ParseAssignment() {
-    auto expr = ParseLogicalOr();
-    
-    if (Match(TokenKind::EQUAL)) {
-        auto value = ParseAssignment();
-        
-        // Check that the left-hand side is a valid assignment target
-        if (std::dynamic_pointer_cast<VarExpr>(expr) ||
-            std::dynamic_pointer_cast<SubscriptExpr>(expr) ||
-            std::dynamic_pointer_cast<FieldExpr>(expr)) {
-            return std::make_shared<AssignExpr>(expr, value);
