@@ -25,7 +25,7 @@ std::shared_ptr<ArrayType> CreateArrayType(std::shared_ptr<Type> element_type, s
  * Parser constructor - Initialize the parser with a lexer
  */
 Parser::Parser(Lexer& lexer, DiagnosticReporter& diag_reporter)
-    : lexer_(lexer), diag_reporter_(diag_reporter) {
+    : lexer_(lexer), diag_reporter_(diag_reporter), has_errors_(false) {
     // Initialize the current token
     current_token_ = lexer_.GetNextToken();
 }
@@ -218,8 +218,9 @@ std::shared_ptr<Type> Parser::ParseType() {
         Match(TokenKind::KW_INT) || Match(TokenKind::KW_LONG) ||
         Match(TokenKind::KW_FLOAT) || Match(TokenKind::KW_DOUBLE)) {
         
-        // Create the type using the token that was matched (which is now the previous token)
-        auto type = CreateType(Advance(), is_unsigned);
+        // Get the previously consumed token for type creation
+        Token type_token = Peek();
+        auto type = CreateType(type_token, is_unsigned);
         
         // Check for pointer type
         while (Match(TokenKind::STAR)) {
@@ -887,5 +888,20 @@ std::shared_ptr<Expr> Parser::ParseAssignment() {
 
 /**
  * ParseLogicalOr - Parse a logical OR expression
+ */
+std::shared_ptr<Expr> Parser::ParseLogicalOr() {
+    auto expr = ParseLogicalAnd();
+    
+    while (Match(TokenKind::LOGICAL_OR)) {
+        auto right = ParseLogicalAnd();
+        auto type = std::make_shared<BoolType>();
+        expr = std::make_shared<BinaryExpr>(BinaryExpr::Op::LOGICAL_OR, expr, right, type);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseLogicalAnd - Parse a logical AND expression
  */
 std::shared_ptr
