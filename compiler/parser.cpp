@@ -875,33 +875,4 @@ std::shared_ptr<Expr> Parser::ParseAssignment() {
         auto value = ParseAssignment();
         
         // Check that the left-hand side is a valid assignment target
-        if (std::dynamic_pointer_cast<VarExpr>(expr) ||
-            std::dynamic_pointer_cast<SubscriptExpr>(expr)) {
-            return std::make_shared<AssignExpr>(expr, value);
-        }
-        
-        ReportError("Invalid assignment target");
-    }
-    
-    return expr;
-}
-
-/**
- * ParseLogicalOr - Parse a logical OR expression
- */
-std::shared_ptr<Expr> Parser::ParseLogicalOr() {
-    auto expr = ParseLogicalAnd();
-    
-    while (Match(TokenKind::LOGICAL_OR)) {
-        auto right = ParseLogicalAnd();
-        auto type = std::make_shared<BoolType>();
-        expr = std::make_shared<BinaryExpr>(BinaryExpr::Op::LOGICAL_OR, expr, right, type);
-    }
-    
-    return expr;
-}
-
-/**
- * ParseLogicalAnd - Parse a logical AND expression
- */
-std::shared_ptr
+        if (std::dynamic_pointer_cast<VarExpr
