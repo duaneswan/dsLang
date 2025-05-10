@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://cdn.dtechmediacreations.com/controller.php?system=dsLang.png" alt="dsLang Logo" />
+</p>
+
 # dsLang
 
 dsLang is a systems programming language designed specifically for building dsOS (a custom x86-64 operating system) and applications that run on it. With C/Objective-C-inspired syntax, dsLang provides a minimal yet powerful toolset for low-level OS development.
@@ -50,3 +54,4 @@ See the [documentation](/docs/) for detailed information on dsLang syntax, stand
 ## License
 
 This project is distributed under the MIT License. See LICENSE for more information.
+
