@@ -37,18 +37,33 @@
 namespace dsLang {
 
 /**
- * CodeGenError - Exception thrown for code generation errors
+ * CodeGenError - Error reporting for code generation errors
+ * 
+ * Since exceptions are disabled, this class provides non-throwing error reporting.
  */
-class CodeGenError : public std::runtime_error {
+class CodeGenError {
 public:
     CodeGenError(const std::string& message)
-        : std::runtime_error("Code generation error: " + message),
-          message_(message) {}
+        : message_(message), has_error_(true) {
+        std::cerr << "Code generation error: " << message << std::endl;
+    }
+    
+    static CodeGenError Success() {
+        return CodeGenError("");
+    }
     
     const std::string& GetMessage() const { return message_; }
     
+    bool HasError() const { return has_error_; }
+    
+    operator bool() const { return !has_error_; }
+    
 private:
     std::string message_;
+    bool has_error_{false};
+    
+    // Private constructor for Success()
+    CodeGenError() : has_error_(false) {}
 };
 
 /**
