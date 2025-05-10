@@ -310,7 +310,11 @@ std::shared_ptr<Decl> Parser::ParseDeclaration() {
             return ParseMethodDeclaration();
         } else {
             // Try parsing as a function or variable
-            return ParseFunctionDeclaration();
+            auto decl = ParseFunctionDeclaration();
+            if (!decl) {
+                return ParseVariableDeclaration();
+            }
+            return decl;
         }
     }
     
@@ -340,8 +344,9 @@ std::shared_ptr<FuncDecl> Parser::ParseFunctionDeclaration() {
     
     // Check for function vs variable declaration
     if (!Check(TokenKind::LEFT_PAREN)) {
-        // This is a variable declaration
-        return std::dynamic_pointer_cast<FuncDecl>(ParseVariableDeclaration());
+        // This is a variable declaration, not a function
+        // We need to return nullptr here, not try to parse it as a variable
+        return nullptr;
     }
     
     // Consume the opening parenthesis
@@ -857,21 +862,4 @@ std::shared_ptr<ReturnStmt> Parser::ParseReturnStatement() {
 std::shared_ptr<BreakStmt> Parser::ParseBreakStatement() {
     Consume(TokenKind::SEMICOLON, "Expected ';' after 'break'");
     
-    return std::make_shared<BreakStmt>();
-}
-
-/**
- * ParseContinueStatement - Parse a continue statement
- */
-std::shared_ptr<ContinueStmt> Parser::ParseContinueStatement() {
-    Consume(TokenKind::SEMICOLON, "Expected ';' after 'continue'");
-    
-    return std::make_shared<ContinueStmt>();
-}
-
-//===----------------------------------------------------------------------===//
-// Helper Methods
-//===----------------------------------------------------------------------===//
-
-/**
- * MakeBinaryExpr -
+    return std::make_shared<BreakSt
