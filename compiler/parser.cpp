@@ -237,9 +237,6 @@ std::shared_ptr<Decl> Parser::ParseDeclaration() {
         std::string name = Peek().GetLexeme();
         Advance();
         
-        // Save the current state for possible backtracking
-        Token saved_token = current_token_;
-        
         // Check if this is a function declaration
         if (Check(TokenKind::LEFT_PAREN)) {
             return ParseFunctionDeclaration();
@@ -317,6 +314,7 @@ std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration() {
         ReportError("Expected return type for method");
         return nullptr;
     }
+    
     // Consume the opening bracket
     Consume(TokenKind::LEFT_BRACKET, "Expected '[' at start of method declaration");
     
@@ -328,6 +326,9 @@ std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration() {
     
     std::string receiver = Peek().GetLexeme();
     Advance();
+    
+    // For simplicity, assume all receivers are of type 'struct receiver'
+    auto receiver_type = std::make_shared<StructType>(receiver);
     
     // Parse the method selector and parameters
     if (!Check(TokenKind::IDENTIFIER)) {
@@ -367,13 +368,13 @@ std::shared_ptr<MethodDecl> Parser::ParseMethodDeclaration() {
     
     if (Match(TokenKind::SEMICOLON)) {
         // Method declaration (no body)
-        return std::make_shared<MethodDecl>(selector, receiver, return_type, parameters, body);
+        return std::make_shared<MethodDecl>(selector, return_type, receiver_type, parameters, body);
     }
     
     // Method definition (with body)
     body = ParseBlockStatement();
     
-    return std::make_shared<MethodDecl>(selector, receiver, return_type, parameters, body);
+    return std::make_shared<MethodDecl>(selector, return_type, receiver_type, parameters, body);
 }
 
 /**
@@ -788,6 +789,20 @@ std::shared_ptr<ExprStmt> Parser::ParseExpressionStatement() {
 }
 
 /**
+ * ParseDeclarationStatement - Parse a declaration statement
+ */
+std::shared_ptr<DeclStmt> Parser::ParseDeclarationStatement() {
+    // Parse a variable declaration
+    auto decl = ParseVariableDeclaration();
+    if (!decl) {
+        ReportError("Expected variable declaration");
+        return nullptr;
+    }
+    
+    return std::make_shared<DeclStmt>(decl);
+}
+
+/**
  * ParseIfStatement - Parse an if statement
  */
 std::shared_ptr<IfStmt> Parser::ParseIfStatement() {
@@ -858,4 +873,11 @@ std::shared_ptr<ForStmt> Parser::ParseForStatement() {
     // Parse body
     auto body = ParseStatement();
     
-    return std::make_shared<ForStmt>(init
+    return std::make_shared<ForStmt>(init, condition, increment, body);
+}
+
+/**
+ * ParseReturnStatement - Parse a return statement
+ */
+std::shared_ptr<ReturnStmt> Parser::ParseReturnStatement() {
+    std::shared_ptr<Expr> value =
