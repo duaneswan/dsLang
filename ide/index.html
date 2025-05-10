@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>dsLang IDE</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/codemirror.css">
+</head>
+<body>
+    <div class="ide-container">
+        <header class="ide-header">
+            <div class="logo">
+                <h1>dsLang IDE</h1>
+            </div>
+            <div class="toolbar">
+                <button id="new-file" title="New File">New</button>
+                <button id="open-file" title="Open File">Open</button>
+                <button id="save-file" title="Save File">Save</button>
+                <button id="compile" title="Compile">Compile</button>
+                <button id="run" title="Run">Run</button>
+                <button id="run-os" title="Run OS in QEMU">Run OS</button>
+            </div>
+        </header>
+        
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="file-explorer">
+                    <h3>Files</h3>
+                    <ul id="file-list">
+                        <!-- Files will be loaded here -->
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="editor-container">
+                <div id="editor"></div>
+            </div>
+            
+            <div class="output-container">
+                <div class="output-header">
+                    <h3>Output</h3>
+                    <button id="clear-output">Clear</button>
+                </div>
+                <div id="output"></div>
+            </div>
+        </div>
+        
+        <footer class="ide-footer">
+            <div class="status-bar">
+                <span id="cursor-position">Line: 1, Col: 1</span>
+                <span id="file-type">dsLang</span>
+                <span id="compiler-status">Ready</span>
+            </div>
+        </footer>
+    </div>
+
+    <div id="file-dialog" class="dialog">
+        <div class="dialog-content">
+            <div class="dialog-header">
+                <h2>Open File</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="dialog-body">
+                <div id="file-browser">
+                    <!-- File browser content will be loaded here -->
+                </div>
+            </div>
+            <div class="dialog-footer">
+                <button id="dialog-cancel">Cancel</button>
+                <button id="dialog-confirm">Open</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Scripts -->
+    <script src="js/codemirror.js"></script>
+    <script src="js/dsLang-mode.js"></script>
+    <script src="js/ide.js"></script>
+</body>
+</html>
