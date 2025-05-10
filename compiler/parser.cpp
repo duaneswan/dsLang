@@ -422,7 +422,7 @@ std::shared_ptr<VarDecl> Parser::ParseVariableDeclaration() {
         // Create array type using the helper function
         if (has_constant_size) {
             type = CreateArrayType(type, array_size);
-        } else {
+        } else if (size_expr) {
             type = CreateArrayType(type, size_expr);
         }
     }
@@ -462,7 +462,7 @@ std::shared_ptr<ParamDecl> Parser::ParseParameterDeclaration() {
     if (Match(TokenKind::LEFT_BRACKET)) {
         Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after array parameter");
         
-        // Create array type using zero size (for parameters, size is not needed)
+        // Create array type using the helper function with zero size for parameters
         type = CreateArrayType(type, (size_t)0);
     }
     
@@ -519,7 +519,12 @@ std::shared_ptr<StructDecl> Parser::ParseStructDeclaration() {
             Consume(TokenKind::RIGHT_BRACKET, "Expected ']' after array size");
             
             // Create array type using the helper function
-            type = CreateArrayType(type, size_expr);
+            if (size_expr) {
+                type = CreateArrayType(type, size_expr);
+            } else {
+                // For variable length arrays in struct fields, use size 0
+                type = CreateArrayType(type, (size_t)0);
+            }
         }
         
         Consume(TokenKind::SEMICOLON, "Expected ';' after struct field declaration");
@@ -587,125 +592,6 @@ std::shared_ptr<EnumDecl> Parser::ParseEnumDeclaration() {
     // Assume a base type of int for all enums for now
     auto base_type = std::make_shared<IntType>();
     return std::make_shared<EnumDecl>(name, base_type, enumerators);
-}
-
-/**
- * ParseCastExpression - Parse a cast expression
- */
-std::shared_ptr<Expr> Parser::ParseCastExpression() {
-    // Save the current token position in case we need to backtrack
-    Token start_token = current_token_;
-    
-    // Consume the opening parenthesis
-    Consume(TokenKind::LEFT_PAREN, "Expected '(' at start of cast expression");
-    
-    // Try to parse the type
-    auto maybe_type = ParseType();
-    if (maybe_type && Match(TokenKind::RIGHT_PAREN)) {
-        // If we successfully parsed a type and found a closing parenthesis,
-        // it's a cast expression
-        auto expr_to_cast = ParseExpression();
-        
-        // Create a new cast expression
-        return std::make_shared<CastExpr>(expr_to_cast, maybe_type);
-    } else {
-        // If parsing type fails, it's a parenthesized expression, not a cast
-        // Reset the token index and continue
-        current_token_ = start_token;
-        return nullptr;
-    }
-}
-
-/**
- * ParseType - Parse a type
- */
-std::shared_ptr<Type> Parser::ParseType() {
-    bool is_unsigned = false;
-    
-    // Check for unsigned keyword
-    if (Match(TokenKind::KW_UNSIGNED)) {
-        is_unsigned = true;
-    }
-    
-    // Check for basic types
-    if (Check(TokenKind::KW_VOID) || Check(TokenKind::KW_BOOL) ||
-        Check(TokenKind::KW_CHAR) || Check(TokenKind::KW_SHORT) ||
-        Check(TokenKind::KW_INT) || Check(TokenKind::KW_LONG) ||
-        Check(TokenKind::KW_FLOAT) || Check(TokenKind::KW_DOUBLE)) {
-        
-        auto type = CreateType(Peek(), is_unsigned);
-        Advance();
-        
-        // Check for pointer types
-        while (Match(TokenKind::STAR)) {
-            type = std::make_shared<PointerType>(type);
-        }
-        
-        return type;
-    }
-    
-    // Check for struct or enum type
-    if (Match(TokenKind::KW_STRUCT)) {
-        if (!Check(TokenKind::IDENTIFIER)) {
-            ReportError("Expected struct name after 'struct'");
-            return nullptr;
-        }
-        
-        std::string name = Peek().GetLexeme();
-        Advance();
-        
-        // Check if we've already created this struct type
-        auto it = struct_types_.find(name);
-        if (it != struct_types_.end()) {
-            return it->second;
-        }
-        
-        // Create a new struct type
-        auto type = std::make_shared<StructType>(name);
-        struct_types_[name] = type;
-        
-        // Check for pointer types
-        while (Match(TokenKind::STAR)) {
-            type = std::make_shared<PointerType>(type);
-        }
-        
-        return type;
-    }
-    
-    if (Match(TokenKind::KW_ENUM)) {
-        if (!Check(TokenKind::IDENTIFIER)) {
-            ReportError("Expected enum name after 'enum'");
-            return nullptr;
-        }
-        
-        std::string name = Peek().GetLexeme();
-        Advance();
-        
-        // Check if we've already created this enum type
-        auto it = enum_types_.find(name);
-        if (it != enum_types_.end()) {
-            return it->second;
-        }
-        
-        // Create a new enum type
-        auto base_type = std::make_shared<IntType>();
-        auto type = std::make_shared<EnumType>(name, base_type);
-        enum_types_[name] = type;
-        
-        // Check for pointer types
-        while (Match(TokenKind::STAR)) {
-            type = std::make_shared<PointerType>(type);
-        }
-        
-        return type;
-    }
-    
-    // If we reach here, it's not a valid type
-    if (is_unsigned) {
-        ReportError("Expected type after 'unsigned'");
-    }
-    
-    return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -880,4 +766,117 @@ std::shared_ptr<ForStmt> Parser::ParseForStatement() {
  * ParseReturnStatement - Parse a return statement
  */
 std::shared_ptr<ReturnStmt> Parser::ParseReturnStatement() {
-    std::shared_ptr<Expr> value =
+    std::shared_ptr<Expr> value = nullptr;
+    
+    // Check if the return statement has a value
+    if (!Check(TokenKind::SEMICOLON)) {
+        value = ParseExpression();
+    }
+    
+    Consume(TokenKind::SEMICOLON, "Expected ';' after return value");
+    
+    return std::make_shared<ReturnStmt>(value);
+}
+
+/**
+ * ParseBreakStatement - Parse a break statement
+ */
+std::shared_ptr<BreakStmt> Parser::ParseBreakStatement() {
+    Consume(TokenKind::SEMICOLON, "Expected ';' after 'break'");
+    
+    return std::make_shared<BreakStmt>();
+}
+
+/**
+ * ParseContinueStatement - Parse a continue statement
+ */
+std::shared_ptr<ContinueStmt> Parser::ParseContinueStatement() {
+    Consume(TokenKind::SEMICOLON, "Expected ';' after 'continue'");
+    
+    return std::make_shared<ContinueStmt>();
+}
+
+//===----------------------------------------------------------------------===//
+// Expressions
+//===----------------------------------------------------------------------===//
+
+/**
+ * ParseExpression - Parse an expression
+ * 
+ * This is the entry point for parsing expressions.
+ * Expression grammar (in decreasing precedence):
+ * - Primary: literals, variables, parenthesized expressions
+ * - Unary: !, ~, -, ++, --, *, &
+ * - Multiplicative: *, /, %
+ * - Additive: +, -
+ * - Shift: <<, >>
+ * - Relational: <, >, <=, >=
+ * - Equality: ==, !=
+ * - BitwiseAND: &
+ * - BitwiseXOR: ^
+ * - BitwiseOR: |
+ * - LogicalAND: &&
+ * - LogicalOR: ||
+ * - Assignment: =
+ */
+std::shared_ptr<Expr> Parser::ParseExpression() {
+    return ParseAssignment();
+}
+
+/**
+ * ParseAssignment - Parse an assignment expression
+ */
+std::shared_ptr<Expr> Parser::ParseAssignment() {
+    auto expr = ParseLogicalOr();
+    
+    if (Match(TokenKind::EQUAL)) {
+        auto value = ParseAssignment();  // Right-associative
+        
+        // Check if the left-hand side is a valid assignment target
+        if (std::dynamic_pointer_cast<VarExpr>(expr) ||
+            std::dynamic_pointer_cast<SubscriptExpr>(expr) ||
+            std::dynamic_pointer_cast<UnaryExpr>(expr)) {
+            return std::make_shared<AssignExpr>(expr, value);
+        }
+        
+        ReportError("Invalid assignment target");
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseLogicalOr - Parse a logical OR expression
+ */
+std::shared_ptr<Expr> Parser::ParseLogicalOr() {
+    auto expr = ParseLogicalAnd();
+    
+    while (Match(TokenKind::LOGICAL_OR)) {
+        auto right = ParseLogicalAnd();
+        auto type = std::make_shared<BoolType>();  // Logical expressions always return bool
+        expr = std::make_shared<BinaryExpr>(BinaryExpr::Op::LOGICAL_OR, expr, right, type);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseLogicalAnd - Parse a logical AND expression
+ */
+std::shared_ptr<Expr> Parser::ParseLogicalAnd() {
+    auto expr = ParseBitwiseOr();
+    
+    while (Match(TokenKind::LOGICAL_AND)) {
+        auto right = ParseBitwiseOr();
+        auto type = std::make_shared<BoolType>();  // Logical expressions always return bool
+        expr = std::make_shared<BinaryExpr>(BinaryExpr::Op::LOGICAL_AND, expr, right, type);
+    }
+    
+    return expr;
+}
+
+/**
+ * ParseBitwiseOr - Parse a bitwise OR expression
+ */
+std::shared_ptr<Expr> Parser::ParseBitwiseOr() {
+    auto expr = ParseBi
