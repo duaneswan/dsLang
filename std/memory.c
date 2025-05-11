@@ -6,6 +6,8 @@
  * memory manipulation functions.
  */
 
+// Added comment to check to see if my automated python script is working correctly
+
 #include <stddef.h>
 
 // Define size_t if not already defined
