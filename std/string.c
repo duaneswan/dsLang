@@ -6,6 +6,8 @@
  * null-terminated strings.
  */
 
+//Added this comment here to see if my automated python script actually works!
+
 #include <stddef.h>
 
 // Define size_t if not already defined
